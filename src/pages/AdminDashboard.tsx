@@ -20,6 +20,7 @@ interface BlogPost {
   content: string;
   date: string;
   author: string;
+  image?: string;
 }
 
 interface Order {
@@ -55,6 +56,7 @@ const Products = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const fetchProducts = async () => {
     try {
@@ -79,6 +81,7 @@ const Products = () => {
   const handleEditProduct = (product: Product) => {
     setEditingProduct(product);
     setImagePreview(product.image.startsWith('http') ? product.image : `http://localhost:5000/uploads/${product.image}`);
+    setSelectedFile(null);
     setIsEditModalOpen(true);
   };
 
@@ -92,7 +95,59 @@ const Products = () => {
       stock: 0,
     });
     setImagePreview('');
+    setSelectedFile(null);
     setIsAddModalOpen(true);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        setImagePreview(result);
+        if (isEdit && editingProduct) {
+          setEditingProduct({...editingProduct, image: file.name});
+        } else {
+          setNewProduct({...newProduct, image: file.name});
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleImageUrlChange = (url: string, isEdit: boolean = false) => {
+    if (isEdit && editingProduct) {
+      setEditingProduct({...editingProduct, image: url});
+    } else {
+      setNewProduct({...newProduct, image: url});
+    }
+    setImagePreview(url);
+    setSelectedFile(null);
+  };
+
+  const uploadImage = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const response = await fetch('http://localhost:5000/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.filename || data.path || file.name;
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      // Return filename as fallback
+      return file.name;
+    }
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
@@ -101,6 +156,13 @@ const Products = () => {
 
     setIsLoading(true);
     try {
+      let imageUrl = editingProduct.image;
+      
+      // Upload image if a file is selected
+      if (selectedFile) {
+        imageUrl = await uploadImage(selectedFile);
+      }
+
       const token = localStorage.getItem('adminToken');
       const response = await fetch(`http://localhost:5000/product/update/${editingProduct._id}`, {
         method: 'PUT',
@@ -114,6 +176,7 @@ const Products = () => {
           price: editingProduct.price,
           category: editingProduct.category,
           stock: editingProduct.stock,
+          image: imageUrl,
         }),
       });
 
@@ -121,6 +184,7 @@ const Products = () => {
         await fetchProducts();
         setIsEditModalOpen(false);
         setEditingProduct(null);
+        setSelectedFile(null);
         alert('Product updated successfully!');
       } else {
         const errorData = await response.json();
@@ -139,6 +203,13 @@ const Products = () => {
 
     setIsLoading(true);
     try {
+      let imageUrl = newProduct.image;
+      
+      // Upload image if a file is selected
+      if (selectedFile) {
+        imageUrl = await uploadImage(selectedFile);
+      }
+
       const token = localStorage.getItem('adminToken');
       const response = await fetch('http://localhost:5000/product/add', {
         method: 'POST',
@@ -146,7 +217,10 @@ const Products = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify(newProduct),
+        body: JSON.stringify({
+          ...newProduct,
+          image: imageUrl,
+        }),
       });
 
       if (response.ok) {
@@ -161,6 +235,7 @@ const Products = () => {
           stock: 0,
         });
         setImagePreview('');
+        setSelectedFile(null);
         alert('Product added successfully!');
       } else {
         const errorData = await response.json();
@@ -197,15 +272,6 @@ const Products = () => {
       console.error('Error deleting product:', error);
       alert('Error deleting product. Please try again.');
     }
-  };
-
-  const handleImageUrlChange = (url: string, isEdit: boolean = false) => {
-    if (isEdit && editingProduct) {
-      setEditingProduct({...editingProduct, image: url});
-    } else {
-      setNewProduct({...newProduct, image: url});
-    }
-    setImagePreview(url);
   };
 
   const filteredProducts = products.filter(product =>
@@ -397,27 +463,60 @@ const Products = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Product Image</label>
+                
+                {/* File Upload */}
+                <div className="mb-3">
+                  <label className="flex items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <Upload className="w-8 h-8 mb-2 text-gray-400" />
+                      <p className="mb-2 text-sm text-gray-500">
+                        <span className="font-semibold">Click to upload</span> or drag and drop
+                      </p>
+                      <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
+                    </div>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={(e) => handleFileSelect(e)}
+                    />
+                  </label>
+                </div>
+
+                {/* OR divider */}
+                <div className="relative mb-3">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500">OR</span>
+                  </div>
+                </div>
+
+                {/* URL Input */}
                 <input
                   type="url"
-                  value={newProduct.image}
+                  value={selectedFile ? '' : newProduct.image}
                   onChange={(e) => handleImageUrlChange(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="https://example.com/image.jpg or leave empty for default"
+                  disabled={!!selectedFile}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
+                  placeholder="https://example.com/image.jpg"
                 />
+
                 {imagePreview && (
-                  <div className="mt-2">
+                  <div className="mt-3">
                     <img
                       src={imagePreview}
                       alt="Preview"
-                      className="w-20 h-20 object-cover rounded-md border"
+                      className="w-24 h-24 object-cover rounded-md border"
                       onError={() => setImagePreview('')}
                     />
+                    {selectedFile && (
+                      <p className="text-xs text-gray-500 mt-1">Selected: {selectedFile.name}</p>
+                    )}
                   </div>
                 )}
-                <p className="text-xs text-gray-500 mt-1">
-                  Use Unsplash URLs or leave empty for default image
-                </p>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
@@ -542,22 +641,58 @@ const Products = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Product Image</label>
+                  
+                  {/* File Upload */}
+                  <div className="mb-3">
+                    <label className="flex items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <Upload className="w-8 h-8 mb-2 text-gray-400" />
+                        <p className="mb-2 text-sm text-gray-500">
+                          <span className="font-semibold">Click to upload new image</span>
+                        </p>
+                        <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
+                      </div>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/*"
+                        onChange={(e) => handleFileSelect(e, true)}
+                      />
+                    </label>
+                  </div>
+
+                  {/* OR divider */}
+                  <div className="relative mb-3">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-gray-300" />
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="px-2 bg-white text-gray-500">OR</span>
+                    </div>
+                  </div>
+
+                  {/* URL Input */}
                   <input
                     type="url"
-                    value={editingProduct.image}
+                    value={selectedFile ? '' : editingProduct.image}
                     onChange={(e) => handleImageUrlChange(e.target.value, true)}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    disabled={!!selectedFile}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
                     placeholder="https://example.com/image.jpg"
                   />
+
                   {imagePreview && (
-                    <div className="mt-2">
+                    <div className="mt-3">
                       <img
                         src={imagePreview}
                         alt="Preview"
-                        className="w-20 h-20 object-cover rounded-md border"
+                        className="w-24 h-24 object-cover rounded-md border"
                         onError={() => setImagePreview('')}
                       />
+                      {selectedFile && (
+                        <p className="text-xs text-gray-500 mt-1">Selected: {selectedFile.name}</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -601,6 +736,17 @@ const Products = () => {
 const BlogPosts = () => {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
+  const [newPost, setNewPost] = useState<Omit<BlogPost, '_id'>>({
+    title: '',
+    content: '',
+    date: new Date().toISOString().split('T')[0],
+    author: '',
+    image: '',
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchBlogPosts = async () => {
     try {
@@ -633,6 +779,99 @@ const BlogPosts = () => {
     fetchBlogPosts();
   }, []);
 
+  const handleEditPost = (post: BlogPost) => {
+    setEditingPost(post);
+    setIsEditModalOpen(true);
+  };
+
+  const handleAddPost = () => {
+    setNewPost({
+      title: '',
+      content: '',
+      date: new Date().toISOString().split('T')[0],
+      author: '',
+      image: '',
+    });
+    setIsAddModalOpen(true);
+  };
+
+  const handleSavePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPost) return;
+
+    setIsSubmitting(true);
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await fetch(`http://localhost:5000/blog/updateblog/${editingPost._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: editingPost.title,
+          content: editingPost.content,
+          author: editingPost.author,
+          date: editingPost.date,
+          image: editingPost.image,
+        }),
+      });
+
+      if (response.ok) {
+        await fetchBlogPosts();
+        setIsEditModalOpen(false);
+        setEditingPost(null);
+        alert('Blog post updated successfully!');
+      } else {
+        const errorData = await response.json();
+        alert(`Error updating blog post: ${errorData.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error updating blog post:', error);
+      alert('Error updating blog post. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCreatePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    setIsSubmitting(true);
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await fetch('http://localhost:5000/blog/addblogs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(newPost),
+      });
+
+      if (response.ok) {
+        await fetchBlogPosts();
+        setIsAddModalOpen(false);
+        setNewPost({
+          title: '',
+          content: '',
+          date: new Date().toISOString().split('T')[0],
+          author: '',
+          image: '',
+        });
+        alert('Blog post created successfully!');
+      } else {
+        const errorData = await response.json();
+        alert(`Error creating blog post: ${errorData.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error creating blog post:', error);
+      alert('Error creating blog post. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleDeletePost = async (id: string) => {
     if (!confirm('Are you sure you want to delete this blog post?')) return;
 
@@ -662,10 +901,15 @@ const BlogPosts = () => {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">Manage Blog Posts</h2>
-        <button className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+        <motion.button 
+          onClick={handleAddPost}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg"
+        >
           <Plus className="h-4 w-4" />
           New Post
-        </button>
+        </motion.button>
       </div>
 
       {loading ? (
@@ -684,15 +928,24 @@ const BlogPosts = () => {
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <button className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors">
+                  <motion.button 
+                    onClick={() => handleEditPost(post)}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="text-indigo-600 hover:text-indigo-900 p-2 rounded-full hover:bg-indigo-50 transition-colors"
+                    title="Edit post"
+                  >
                     <Pencil className="h-4 w-4" />
-                  </button>
-                  <button 
+                  </motion.button>
+                  <motion.button 
                     onClick={() => handleDeletePost(post._id)}
-                    className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="text-red-600 hover:text-red-900 p-2 rounded-full hover:bg-red-50 transition-colors"
+                    title="Delete post"
                   >
                     <Trash2 className="h-4 w-4" />
-                  </button>
+                  </motion.button>
                 </div>
               </div>
               <p className="mt-2 text-gray-600 line-clamp-2">{post.content}</p>
@@ -700,6 +953,233 @@ const BlogPosts = () => {
           ))}
         </div>
       )}
+
+      {/* Add Blog Post Modal */}
+      <Dialog
+        open={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        className="relative z-50"
+      >
+        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <Dialog.Panel className="mx-auto max-w-2xl w-full rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <Dialog.Title className="text-xl font-semibold text-gray-900">
+                Create New Blog Post
+              </Dialog.Title>
+              <button
+                onClick={() => setIsAddModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreatePost} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                <input
+                  type="text"
+                  value={newPost.title}
+                  onChange={(e) => setNewPost({...newPost, title: e.target.value})}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Enter blog post title"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
+                <textarea
+                  value={newPost.content}
+                  onChange={(e) => setNewPost({...newPost, content: e.target.value})}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  rows={8}
+                  placeholder="Write your blog post content here..."
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Author *</label>
+                  <input
+                    type="text"
+                    value={newPost.author}
+                    onChange={(e) => setNewPost({...newPost, author: e.target.value})}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="Author name"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+                  <input
+                    type="date"
+                    value={newPost.date}
+                    onChange={(e) => setNewPost({...newPost, date: e.target.value})}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Featured Image URL</label>
+                <input
+                  type="url"
+                  value={newPost.image}
+                  onChange={(e) => setNewPost({...newPost, image: e.target.value})}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="https://example.com/image.jpg (optional)"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <motion.button
+                  type="submit"
+                  disabled={isSubmitting}
+                  whileTap={{ scale: 0.98 }}
+                  className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4" />
+                      Create Post
+                    </>
+                  )}
+                </motion.button>
+              </div>
+            </form>
+          </Dialog.Panel>
+        </div>
+      </Dialog>
+
+      {/* Edit Blog Post Modal */}
+      <Dialog
+        open={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        className="relative z-50"
+      >
+        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <Dialog.Panel className="mx-auto max-w-2xl w-full rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <Dialog.Title className="text-xl font-semibold text-gray-900">
+                Edit Blog Post
+              </Dialog.Title>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {editingPost && (
+              <form onSubmit={handleSavePost} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                  <input
+                    type="text"
+                    value={editingPost.title}
+                    onChange={(e) => setEditingPost({...editingPost, title: e.target.value})}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
+                  <textarea
+                    value={editingPost.content}
+                    onChange={(e) => setEditingPost({...editingPost, content: e.target.value})}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    rows={8}
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Author *</label>
+                    <input
+                      type="text"
+                      value={editingPost.author}
+                      onChange={(e) => setEditingPost({...editingPost, author: e.target.value})}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+                    <input
+                      type="date"
+                      value={editingPost.date}
+                      onChange={(e) => setEditingPost({...editingPost, date: e.target.value})}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Featured Image URL</label>
+                  <input
+                    type="url"
+                    value={editingPost.image || ''}
+                    onChange={(e) => setEditingPost({...editingPost, image: e.target.value})}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="https://example.com/image.jpg (optional)"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <motion.button
+                    type="submit"
+                    disabled={isSubmitting}
+                    whileTap={{ scale: 0.98 }}
+                    className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        Save Changes
+                      </>
+                    )}
+                  </motion.button>
+                </div>
+              </form>
+            )}
+          </Dialog.Panel>
+        </div>
+      </Dialog>
     </div>
   );
 };
