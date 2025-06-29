@@ -21,15 +21,8 @@ export interface BlogPost {
   author: string;
 }
 
-export interface User {
-  id: string;
-  username: string;
-  isAdmin: boolean;
-}
-
 export interface Order {
   id: string;
-  userId: string;
   items: CartItem[];
   total: number;
   status: 'pending' | 'processing' | 'shipped' | 'delivered';

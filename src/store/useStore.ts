@@ -1,23 +1,20 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Product, CartItem, User } from '../types';
+import type { Product, CartItem } from '../types';
 
 interface StoreState {
-  user: User | null;
   cart: CartItem[];
   isCartOpen: boolean;
   addToCart: (product: Product) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   toggleCart: () => void;
-  setUser: (user: User | null) => void;
   clearCart: () => void;
 }
 
 export const useStore = create<StoreState>()(
   persist(
     (set) => ({
-      user: null,
       cart: [],
       isCartOpen: false,
       addToCart: (product) =>
@@ -47,7 +44,6 @@ export const useStore = create<StoreState>()(
               )}
         })),
       toggleCart: () => set((state) => ({ isCartOpen: !state.isCartOpen })),
-      setUser: (user) => set({ user }),
       clearCart: () => set({ cart: [] }),
     }),
     {

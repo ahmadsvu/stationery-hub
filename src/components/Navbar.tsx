@@ -1,11 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, User, PenTool } from 'lucide-react';
+import { ShoppingCart, PenTool } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { motion } from 'framer-motion';
 
 export const Navbar = () => {
-  const { toggleCart, cart, user } = useStore();
+  const { toggleCart, cart } = useStore();
   
   return (
     <nav className="bg-white shadow-lg fixed w-full top-0 z-50">
@@ -18,13 +18,12 @@ export const Navbar = () => {
             </Link>
           </div>
           
-          <div className="flex items-center space-x-4">
-            <Link to="/blog" className="text-gray-700 hover:text-indigo-600 transition-colors">
+          <div className="flex items-center space-x-6">
+            <Link 
+              to="/blog" 
+              className="text-gray-700 hover:text-indigo-600 transition-colors font-medium"
+            >
               Blog
-            </Link>
-            
-            <Link to={user ? "/account" : "/login"} className="text-gray-700 hover:text-indigo-600 transition-colors">
-              <User className="h-6 w-6" />
             </Link>
             
             <motion.button

@@ -4,11 +4,8 @@ import { Navbar } from './components/Navbar';
 import { Cart } from './components/Cart';
 import { Home } from './pages/Home';
 import { Blog } from './pages/Blog';
-import { Login } from './pages/Login';
-import { Register } from './pages/Register';
 import { Checkout } from './pages/Checkout';
 import { AdminDashboard } from './pages/AdminDashboard';
-import { ProtectedRoute } from './components/ProtectedRoute';
 
 function App() {
   return (
@@ -20,24 +17,8 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/blog" element={<Blog />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route
-              path="/checkout"
-              element={
-                <ProtectedRoute>
-                  <Checkout />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/*"
-              element={
-                <ProtectedRoute adminOnly>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/admin/*" element={<AdminDashboard />} />
           </Routes>
         </main>
       </div>
