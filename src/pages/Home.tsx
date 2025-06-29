@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ProductCard } from '../components/ProductCard';
-import { Search, Filter, DollarSign } from 'lucide-react';
+import { Search, Filter, DollarSign, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-// import axios from 'axios'; // إذا كنت تفضل axios
+import type { Product } from '../types';
 
 const categories = ['All', 'Notebooks', 'Pens', 'Paper', 'Art Supplies'];
 
@@ -15,26 +15,51 @@ const priceRanges = [
 ];
 
 export const Home = () => {
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPriceRange, setSelectedPriceRange] = useState('all');
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // ✅ جلب البيانات من API عند تحميل الصفحة
   useEffect(() => {
     const fetchProducts = async () => {
       try {
         setLoading(true);
-        const res = await fetch(' http://localhost:5000/product/get'); 
+        setError('');
+        const res = await fetch('http://localhost:5000/product/get'); 
         if (!res.ok) throw new Error('Failed to fetch products');
         const data = await res.json();
-        console.log(data)
         setProducts(data.products || []);
       } catch (err: any) {
         setError(err.message || 'Error fetching products');
+        // Fallback to mock data for development
+        setProducts([
+          {
+            _id: '1',
+            name: 'Premium Notebook',
+            description: 'High-quality paper notebook with leather cover',
+            price: 24.99,
+            image: 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&q=80&w=400',
+            category: 'Notebooks',
+          },
+          {
+            _id: '2',
+            name: 'Fountain Pen Set',
+            description: 'Elegant fountain pen with multiple ink cartridges',
+            price: 45.99,
+            image: 'https://images.unsplash.com/photo-1585336261022-680e295ce3fe?auto=format&fit=crop&q=80&w=400',
+            category: 'Pens',
+          },
+          {
+            _id: '3',
+            name: 'Watercolor Paper Pack',
+            description: 'Professional grade watercolor paper, 20 sheets',
+            price: 18.99,
+            image: 'https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?auto=format&fit=crop&q=80&w=400',
+            category: 'Paper',
+          },
+        ]);
       } finally {
         setLoading(false);
       }
@@ -45,7 +70,7 @@ export const Home = () => {
 
   const handleCategoryChange = (category: string) => {
     setSelectedCategory(category);
-    setSelectedPriceRange('all'); // Reset price range when category changes
+    setSelectedPriceRange('all');
   };
 
   const filteredProducts = products.filter((product) => {
@@ -67,90 +92,138 @@ export const Home = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-12 text-center"
+      >
+        <h1 className="text-5xl font-bold text-gray-900 mb-4">
           Discover Our Premium Stationery
         </h1>
-        <p className="text-gray-600 text-lg">
-          Find the perfect tools for your creative journey
+        <p className="text-gray-600 text-xl max-w-2xl mx-auto">
+          Find the perfect tools for your creative journey with our curated collection of high-quality stationery
         </p>
-      </div>
+      </motion.div>
 
-      {/* ✅ إدخال البحث والفلاتر */}
-      <div className="flex flex-col gap-4 mb-8">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search products..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          />
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex items-center gap-2 flex-1">
-            <Filter className="text-gray-400 flex-shrink-0" />
-            <select
-              value={selectedCategory}
-              onChange={(e) => handleCategoryChange(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            >
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="bg-white rounded-lg shadow-md p-6 mb-8"
+      >
+        <div className="flex flex-col gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search products..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+            />
           </div>
 
-          <AnimatePresence>
-            {selectedCategory !== 'All' && (
-              <motion.div
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                className="flex items-center gap-2 flex-1"
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex items-center gap-2 flex-1">
+              <Filter className="text-gray-400 flex-shrink-0" />
+              <select
+                value={selectedCategory}
+                onChange={(e) => handleCategoryChange(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
               >
-                <DollarSign className="text-gray-400 flex-shrink-0" />
-                <select
-                  value={selectedPriceRange}
-                  onChange={(e) => setSelectedPriceRange(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                >
-                  {priceRanges.map((range) => (
-                    <option key={range.id} value={range.id}>
-                      {range.label}
-                    </option>
-                  ))}
-                </select>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-      {/* ✅ عرض الرسائل أو المنتجات */}
+            <AnimatePresence>
+              {selectedCategory !== 'All' && (
+                <motion.div
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  className="flex items-center gap-2 flex-1"
+                >
+                  <DollarSign className="text-gray-400 flex-shrink-0" />
+                  <select
+                    value={selectedPriceRange}
+                    onChange={(e) => setSelectedPriceRange(e.target.value)}
+                    className="w-full border border-gray-300 rounded-md px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  >
+                    {priceRanges.map((range) => (
+                      <option key={range.id} value={range.id}>
+                        {range.label}
+                      </option>
+                    ))}
+                  </select>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </motion.div>
+
+      {error && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 flex items-center gap-3"
+        >
+          <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0" />
+          <div>
+            <p className="text-yellow-800 font-medium">Connection Issue</p>
+            <p className="text-yellow-700 text-sm">Unable to connect to server. Showing sample products.</p>
+          </div>
+        </motion.div>
+      )}
+
       {loading ? (
-        <p className="text-center text-gray-500">Loading products...</p>
-      ) : error ? (
-        <p className="text-center text-red-500">{error}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="bg-white rounded-lg shadow-md overflow-hidden animate-pulse">
+              <div className="w-full h-48 bg-gray-300" />
+              <div className="p-4">
+                <div className="h-4 bg-gray-300 rounded mb-2" />
+                <div className="h-3 bg-gray-300 rounded mb-4" />
+                <div className="flex justify-between items-center">
+                  <div className="h-6 bg-gray-300 rounded w-16" />
+                  <div className="h-8 bg-gray-300 rounded w-24" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : filteredProducts.length === 0 ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="text-center py-12"
+          className="text-center py-16"
         >
-          <p className="text-gray-500 text-lg">No products found matching your criteria.</p>
+          <div className="max-w-md mx-auto">
+            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search className="h-12 w-12 text-gray-400" />
+            </div>
+            <h3 className="text-xl font-medium text-gray-900 mb-2">No products found</h3>
+            <p className="text-gray-500">Try adjusting your search criteria or browse all categories.</p>
+          </div>
         </motion.div>
       ) : (
         <motion.div
           layout
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
         >
-          {filteredProducts.map((product) => (
-            <ProductCard key={product._id} product={product} />
+          {filteredProducts.map((product, index) => (
+            <motion.div
+              key={product._id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
+            >
+              <ProductCard product={product} />
+            </motion.div>
           ))}
         </motion.div>
       )}

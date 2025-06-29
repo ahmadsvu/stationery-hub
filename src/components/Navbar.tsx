@@ -19,18 +19,12 @@ export const Navbar = () => {
           </div>
           
           <div className="flex items-center space-x-4">
-            <Link to="/blog" className="text-gray-700 hover:text-indigo-600">
+            <Link to="/blog" className="text-gray-700 hover:text-indigo-600 transition-colors">
               Blog
             </Link>
             
-            {user?.isAdmin && (
-              <Link to="/admin" className="text-gray-700 hover:text-indigo-600">
-                Admin
-              </Link>
-            )}
-            
-            <Link to={user ? "/account" : "/login"}>
-              <User className="h-6 w-6 text-gray-700 hover:text-indigo-600" />
+            <Link to={user ? "/account" : "/login"} className="text-gray-700 hover:text-indigo-600 transition-colors">
+              <User className="h-6 w-6" />
             </Link>
             
             <motion.button
@@ -38,11 +32,15 @@ export const Navbar = () => {
               className="relative"
               onClick={toggleCart}
             >
-              <ShoppingCart className="h-6 w-6 text-gray-700 hover:text-indigo-600" />
+              <ShoppingCart className="h-6 w-6 text-gray-700 hover:text-indigo-600 transition-colors" />
               {cart.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                <motion.span 
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium"
+                >
                   {cart.reduce((acc, item) => acc + item.quantity, 0)}
-                </span>
+                </motion.span>
               )}
             </motion.button>
           </div>

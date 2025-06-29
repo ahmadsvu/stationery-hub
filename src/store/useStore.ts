@@ -22,11 +22,11 @@ export const useStore = create<StoreState>()(
       isCartOpen: false,
       addToCart: (product) =>
         set((state) => {
-          const existingItem = state.cart.find((item) => item.id === product.id);
+          const existingItem = state.cart.find((item) => item._id === product._id);
           if (existingItem) {
             return {
               cart: state.cart.map((item) =>
-                item.id === product.id
+                item._id === product._id
                   ? { ...item, quantity: item.quantity + 1 }
                   : item
               ),
@@ -36,13 +36,15 @@ export const useStore = create<StoreState>()(
         }),
       removeFromCart: (productId) =>
         set((state) => ({
-          cart: state.cart.filter((item) => item.id !== productId),
+          cart: state.cart.filter((item) => item._id !== productId),
         })),
       updateQuantity: (productId, quantity) =>
         set((state) => ({
-          cart: state.cart.map((item) =>
-            item.id === productId ? { ...item, quantity } : item
-          ),
+          cart: quantity === 0 
+            ? { cart: state.cart.filter((item) => item._id !== productId) }
+            : { cart: state.cart.map((item) =>
+                item._id === productId ? { ...item, quantity } : item
+              )}
         })),
       toggleCart: () => set((state) => ({ isCartOpen: !state.isCartOpen })),
       setUser: (user) => set({ user }),

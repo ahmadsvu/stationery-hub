@@ -5,7 +5,7 @@ export interface Product {
   price: number;
   image: string;
   category: string;
- 
+  stock?: number;
 }
 
 export interface CartItem extends Product {
@@ -36,5 +36,6 @@ export interface Order {
   deliveryArea: string;
   address: string;
   phone: string;
+  name: string;
   createdAt: string;
 }
