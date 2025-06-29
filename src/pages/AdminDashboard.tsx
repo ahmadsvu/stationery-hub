@@ -15,7 +15,7 @@ interface Product {
 }
 
 interface BlogPost {
-  id: string;
+  _id: string;
   title: string;
   content: string;
   date: string;
@@ -49,10 +49,16 @@ const Products = () => {
   const fetchProducts = async () => {
     try {
       const response = await fetch('http://localhost:5000/product/get');
+      if (!response.ok) throw new Error('Failed to fetch products');
       const data = await response.json();
-      setProducts(data.products || []);
+      
+      // Handle different possible response structures
+      const productsArray = data.products || data.data || data || [];
+      setProducts(Array.isArray(productsArray) ? productsArray : []);
     } catch (error) {
       console.error('Error fetching products:', error);
+      // Set empty array on error
+      setProducts([]);
     }
   };
 
@@ -91,9 +97,14 @@ const Products = () => {
         await fetchProducts();
         setIsEditModalOpen(false);
         setEditingProduct(null);
+        alert('Product updated successfully!');
+      } else {
+        const errorData = await response.json();
+        alert(`Error updating product: ${errorData.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error updating product:', error);
+      alert('Error updating product. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -113,9 +124,14 @@ const Products = () => {
 
       if (response.ok) {
         setProducts(products.filter(product => product._id !== id));
+        alert('Product deleted successfully!');
+      } else {
+        const errorData = await response.json();
+        alert(`Error deleting product: ${errorData.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error deleting product:', error);
+      alert('Error deleting product. Please try again.');
     }
   };
 
@@ -327,15 +343,64 @@ const Products = () => {
 };
 
 const BlogPosts = () => {
-  const [posts, setPosts] = useState<BlogPost[]>([
-    {
-      id: '1',
-      title: 'The Art of Journaling',
-      content: 'Discover the therapeutic benefits of daily journaling...',
-      date: '2024-01-15',
-      author: 'John Doe',
-    },
-  ]);
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchBlogPosts = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('http://localhost:5000/blog/getblogs');
+      if (!response.ok) throw new Error('Failed to fetch blog posts');
+      const data = await response.json();
+      
+      // Handle different possible response structures
+      const postsArray = data.blogs || data.data || data || [];
+      setPosts(Array.isArray(postsArray) ? postsArray : []);
+    } catch (error) {
+      console.error('Error fetching blog posts:', error);
+      // Fallback to sample data
+      setPosts([
+        {
+          _id: '1',
+          title: 'The Art of Journaling',
+          content: 'Discover the therapeutic benefits of daily journaling...',
+          date: '2024-01-15',
+          author: 'John Doe',
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBlogPosts();
+  }, []);
+
+  const handleDeletePost = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this blog post?')) return;
+
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await fetch(`http://localhost:5000/blog/deleteblog/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        setPosts(posts.filter(post => post._id !== id));
+        alert('Blog post deleted successfully!');
+      } else {
+        const errorData = await response.json();
+        alert(`Error deleting blog post: ${errorData.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error deleting blog post:', error);
+      alert('Error deleting blog post. Please try again.');
+    }
+  };
 
   return (
     <div>
@@ -347,29 +412,38 @@ const BlogPosts = () => {
         </button>
       </div>
 
-      <div className="space-y-4">
-        {posts.map((post) => (
-          <div key={post.id} className="bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow">
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="text-lg font-semibold">{post.title}</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  By {post.author} • {new Date(post.date).toLocaleDateString()}
-                </p>
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {posts.map((post) => (
+            <div key={post._id} className="bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-lg font-semibold">{post.title}</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    By {post.author} • {new Date(post.date).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors">
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button 
+                    onClick={() => handleDeletePost(post._id)}
+                    className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <button className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors">
-                  <Pencil className="h-4 w-4" />
-                </button>
-                <button className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+              <p className="mt-2 text-gray-600 line-clamp-2">{post.content}</p>
             </div>
-            <p className="mt-2 text-gray-600 line-clamp-2">{post.content}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -378,17 +452,24 @@ const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const fetchOrders = async () => {
     try {
+      setLoading(true);
       const token = localStorage.getItem('adminToken');
-      const response = await fetch('http://localhost:5000/admin/orders', {
+      const response = await fetch('http://localhost:5000/api/getorders', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
+      
+      if (!response.ok) throw new Error('Failed to fetch orders');
       const data = await response.json();
-      setOrders(data.orders || []);
+      
+      // Handle different possible response structures
+      const ordersArray = data.orders || data.data || data || [];
+      setOrders(Array.isArray(ordersArray) ? ordersArray : []);
     } catch (error) {
       console.error('Error fetching orders:', error);
       // Mock data for development
@@ -407,6 +488,8 @@ const Orders = () => {
           createdAt: '2024-01-20T10:00:00Z',
         },
       ]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -422,7 +505,7 @@ const Orders = () => {
   const updateOrderStatus = async (orderId: string, status: Order['status']) => {
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await fetch(`http://localhost:5000/admin/orders/${orderId}/status`, {
+      const response = await fetch(`http://localhost:5000/api/orders/${orderId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -435,9 +518,14 @@ const Orders = () => {
         setOrders(orders.map(order => 
           order._id === orderId ? { ...order, status } : order
         ));
+        alert('Order status updated successfully!');
+      } else {
+        const errorData = await response.json();
+        alert(`Error updating order status: ${errorData.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error updating order status:', error);
+      alert('Error updating order status. Please try again.');
     }
   };
 
@@ -454,53 +542,60 @@ const Orders = () => {
   return (
     <div>
       <h2 className="text-2xl font-bold mb-6">Manage Orders</h2>
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {orders.map((order) => (
-              <tr key={order._id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{order._id.slice(-6)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.name}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(order.createdAt).toLocaleDateString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <select
-                    value={order.status}
-                    onChange={(e) => updateOrderStatus(order._id, e.target.value as Order['status'])}
-                    className={`px-2 py-1 text-xs leading-5 font-semibold rounded-full border-0 ${getStatusColor(order.status)}`}
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="processing">Processing</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${order.total.toFixed(2)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button 
-                    onClick={() => handleViewOrder(order)}
-                    className="text-indigo-600 hover:text-indigo-900 flex items-center gap-1 p-1 rounded hover:bg-indigo-50 transition-colors"
-                  >
-                    <Eye className="h-4 w-4" />
-                    View Details
-                  </button>
-                </td>
+      
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {orders.map((order) => (
+                <tr key={order._id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{order._id.slice(-6)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {new Date(order.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <select
+                      value={order.status}
+                      onChange={(e) => updateOrderStatus(order._id, e.target.value as Order['status'])}
+                      className={`px-2 py-1 text-xs leading-5 font-semibold rounded-full border-0 ${getStatusColor(order.status)}`}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="processing">Processing</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${order.total.toFixed(2)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <button 
+                      onClick={() => handleViewOrder(order)}
+                      className="text-indigo-600 hover:text-indigo-900 flex items-center gap-1 p-1 rounded hover:bg-indigo-50 transition-colors"
+                    >
+                      <Eye className="h-4 w-4" />
+                      View Details
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Order Details Modal */}
       <Dialog

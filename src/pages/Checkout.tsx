@@ -42,13 +42,46 @@ export const Checkout = () => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      // Prepare order data
+      const orderData = {
+        name: formData.name,
+        phone: formData.phone,
+        address: formData.address,
+        deliveryArea: selectedArea.name,
+        items: cart.map(item => ({
+          productId: item._id,
+          productName: item.name,
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        total: total,
+        status: 'pending',
+      };
 
-    clearCart();
-    navigate('/');
-    alert('Order placed successfully! We will contact you soon.');
-    setIsSubmitting(false);
+      // Send order to backend
+      const response = await fetch('http://localhost:5000/api/sendorder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderData),
+      });
+
+      if (response.ok) {
+        clearCart();
+        navigate('/');
+        alert('Order placed successfully! We will contact you soon.');
+      } else {
+        const errorData = await response.json();
+        alert(`Error placing order: ${errorData.message || 'Please try again.'}`);
+      }
+    } catch (error) {
+      console.error('Error placing order:', error);
+      alert('Error placing order. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (cart.length === 0) {

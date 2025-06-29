@@ -30,9 +30,13 @@ export const Home = () => {
         const res = await fetch('http://localhost:5000/product/get'); 
         if (!res.ok) throw new Error('Failed to fetch products');
         const data = await res.json();
-        setProducts(data.products || []);
+        
+        // Handle different possible response structures
+        const productsArray = data.products || data.data || data || [];
+        setProducts(Array.isArray(productsArray) ? productsArray : []);
       } catch (err: any) {
         setError(err.message || 'Error fetching products');
+        console.error('Error fetching products:', err);
         // Fallback to mock data for development
         setProducts([
           {
