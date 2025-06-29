@@ -6,6 +6,7 @@ import { Home } from './pages/Home';
 import { Blog } from './pages/Blog';
 import { Checkout } from './pages/Checkout';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { AdminLogin } from './pages/AdminLogin';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/blog" element={<Blog />} />
             <Route path="/checkout" element={<Checkout />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin/*" element={<AdminDashboard />} />
           </Routes>
         </main>
