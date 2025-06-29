@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Package, FileText, ShoppingBag, Plus, Pencil, Trash2, Search, LogOut, Eye, X, Save, Upload, Image } from 'lucide-react';
+import { Package, FileText, ShoppingBag, Plus, Pencil, Trash2, Search, LogOut, Eye, X, Save, Upload, Calendar, User as UserIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog } from '@headlessui/react';
 
@@ -46,31 +46,81 @@ const Products = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [newProduct, setNewProduct] = useState<Omit<Product, '_id'>>({
+  const [newProduct, setNewProduct] = useState({
     name: '',
     description: '',
     price: 0,
-    image: '',
     category: 'Notebooks',
     stock: 0,
+    image: '',
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string>('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
+
+  const checkConnection = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/product/get', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        setConnectionStatus('connected');
+        return true;
+      } else {
+        setConnectionStatus('disconnected');
+        return false;
+      }
+    } catch (error) {
+      console.error('Connection check failed:', error);
+      setConnectionStatus('disconnected');
+      return false;
+    }
+  };
 
   const fetchProducts = async () => {
     try {
-      const response = await fetch('http://localhost:5000/product/get');
-      if (!response.ok) throw new Error('Failed to fetch products');
-      const data = await response.json();
+      setIsLoading(true);
+      const isConnected = await checkConnection();
       
-      // Handle different possible response structures
-      const productsArray = data.products || data.data || data || [];
-      setProducts(Array.isArray(productsArray) ? productsArray : []);
+      if (isConnected) {
+        const response = await fetch('http://localhost:5000/product/get');
+        const data = await response.json();
+        
+        // Handle different response structures
+        const productsArray = data.products || data.data || data || [];
+        setProducts(Array.isArray(productsArray) ? productsArray : []);
+      } else {
+        // Use mock data when backend is not available
+        setProducts([
+          {
+            _id: 'mock-1',
+            name: 'Premium Notebook',
+            description: 'High-quality paper notebook with leather cover',
+            price: 24.99,
+            image: 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&q=80&w=400',
+            category: 'Notebooks',
+            stock: 50,
+          },
+          {
+            _id: 'mock-2',
+            name: 'Fountain Pen Set',
+            description: 'Elegant fountain pen with multiple ink cartridges',
+            price: 45.99,
+            image: 'https://images.unsplash.com/photo-1585336261022-680e295ce3fe?auto=format&fit=crop&q=80&w=400',
+            category: 'Pens',
+            stock: 25,
+          },
+        ]);
+      }
     } catch (error) {
       console.error('Error fetching products:', error);
-      // Set empty array on error
-      setProducts([]);
+      setConnectionStatus('disconnected');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -78,56 +128,7 @@ const Products = () => {
     fetchProducts();
   }, []);
 
-  const handleEditProduct = (product: Product) => {
-    setEditingProduct(product);
-    setImagePreview(product.image.startsWith('http') ? product.image : `http://localhost:5000/uploads/${product.image}`);
-    setSelectedFile(null);
-    setIsEditModalOpen(true);
-  };
-
-  const handleAddProduct = () => {
-    setNewProduct({
-      name: '',
-      description: '',
-      price: 0,
-      image: '',
-      category: 'Notebooks',
-      stock: 0,
-    });
-    setImagePreview('');
-    setSelectedFile(null);
-    setIsAddModalOpen(true);
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        setImagePreview(result);
-        if (isEdit && editingProduct) {
-          setEditingProduct({...editingProduct, image: file.name});
-        } else {
-          setNewProduct({...newProduct, image: file.name});
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleImageUrlChange = (url: string, isEdit: boolean = false) => {
-    if (isEdit && editingProduct) {
-      setEditingProduct({...editingProduct, image: url});
-    } else {
-      setNewProduct({...newProduct, image: url});
-    }
-    setImagePreview(url);
-    setSelectedFile(null);
-  };
-
-  const uploadImage = async (file: File): Promise<string> => {
+  const handleFileUpload = async (file: File): Promise<string> => {
     const formData = new FormData();
     formData.append('image', file);
 
@@ -139,15 +140,82 @@ const Products = () => {
 
       if (response.ok) {
         const data = await response.json();
-        return data.filename || data.path || file.name;
+        return data.filename || data.url || file.name;
       } else {
         throw new Error('Upload failed');
       }
     } catch (error) {
-      console.error('Error uploading image:', error);
-      // Return filename as fallback
-      return file.name;
+      console.error('File upload error:', error);
+      // Return a placeholder or the file name as fallback
+      return `uploaded_${file.name}`;
     }
+  };
+
+  const handleAddProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      let imageUrl = newProduct.image;
+
+      // Handle file upload if a file is selected
+      if (selectedFile) {
+        imageUrl = await handleFileUpload(selectedFile);
+      }
+
+      const productData = {
+        ...newProduct,
+        image: imageUrl,
+      };
+
+      if (connectionStatus === 'connected') {
+        const token = localStorage.getItem('adminToken');
+        const response = await fetch('http://localhost:5000/product/add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(productData),
+        });
+
+        if (response.ok) {
+          await fetchProducts();
+        } else {
+          const errorData = await response.json();
+          alert(`Error: ${errorData.message || 'Failed to add product'}`);
+        }
+      } else {
+        // Add to mock data when backend is not available
+        const mockProduct = {
+          ...productData,
+          _id: `mock-${Date.now()}`,
+        };
+        setProducts(prev => [...prev, mockProduct]);
+      }
+
+      // Reset form
+      setNewProduct({
+        name: '',
+        description: '',
+        price: 0,
+        category: 'Notebooks',
+        stock: 0,
+        image: '',
+      });
+      setSelectedFile(null);
+      setIsAddModalOpen(false);
+    } catch (error) {
+      console.error('Error adding product:', error);
+      alert('Error adding product. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setIsEditModalOpen(true);
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
@@ -157,93 +225,54 @@ const Products = () => {
     setIsLoading(true);
     try {
       let imageUrl = editingProduct.image;
-      
-      // Upload image if a file is selected
+
+      // Handle file upload if a file is selected
       if (selectedFile) {
-        imageUrl = await uploadImage(selectedFile);
+        imageUrl = await handleFileUpload(selectedFile);
       }
 
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`http://localhost:5000/product/update/${editingProduct._id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name: editingProduct.name,
-          description: editingProduct.description,
-          price: editingProduct.price,
-          category: editingProduct.category,
-          stock: editingProduct.stock,
-          image: imageUrl,
-        }),
-      });
+      const updatedProduct = {
+        ...editingProduct,
+        image: imageUrl,
+      };
 
-      if (response.ok) {
-        await fetchProducts();
-        setIsEditModalOpen(false);
-        setEditingProduct(null);
-        setSelectedFile(null);
-        alert('Product updated successfully!');
+      if (connectionStatus === 'connected') {
+        const token = localStorage.getItem('adminToken');
+        const response = await fetch(`http://localhost:5000/product/update/${editingProduct._id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: updatedProduct.name,
+            description: updatedProduct.description,
+            price: updatedProduct.price,
+            category: updatedProduct.category,
+            stock: updatedProduct.stock,
+            image: updatedProduct.image,
+          }),
+        });
+
+        if (response.ok) {
+          await fetchProducts();
+        } else {
+          const errorData = await response.json();
+          alert(`Error: ${errorData.message || 'Failed to update product'}`);
+        }
       } else {
-        const errorData = await response.json();
-        alert(`Error updating product: ${errorData.message || 'Unknown error'}`);
+        // Update mock data
+        setProducts(prev => prev.map(p => 
+          p._id === editingProduct._id ? updatedProduct : p
+        ));
       }
+
+      setIsEditModalOpen(false);
+      setEditingProduct(null);
+      setSelectedFile(null);
     } catch (error) {
       console.error('Error updating product:', error);
       alert('Error updating product. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleCreateProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    setIsLoading(true);
-    try {
-      let imageUrl = newProduct.image;
-      
-      // Upload image if a file is selected
-      if (selectedFile) {
-        imageUrl = await uploadImage(selectedFile);
-      }
-
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('http://localhost:5000/product/add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          ...newProduct,
-          image: imageUrl,
-        }),
-      });
-
-      if (response.ok) {
-        await fetchProducts();
-        setIsAddModalOpen(false);
-        setNewProduct({
-          name: '',
-          description: '',
-          price: 0,
-          image: '',
-          category: 'Notebooks',
-          stock: 0,
-        });
-        setImagePreview('');
-        setSelectedFile(null);
-        alert('Product added successfully!');
-      } else {
-        const errorData = await response.json();
-        alert(`Error adding product: ${errorData.message || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('Error adding product:', error);
-      alert('Error adding product. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -253,20 +282,24 @@ const Products = () => {
     if (!confirm('Are you sure you want to delete this product?')) return;
 
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`http://localhost:5000/product/delete/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      if (connectionStatus === 'connected') {
+        const token = localStorage.getItem('adminToken');
+        const response = await fetch(`http://localhost:5000/product/delete/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
 
-      if (response.ok) {
-        setProducts(products.filter(product => product._id !== id));
-        alert('Product deleted successfully!');
+        if (response.ok) {
+          setProducts(products.filter(product => product._id !== id));
+        } else {
+          const errorData = await response.json();
+          alert(`Error: ${errorData.message || 'Failed to delete product'}`);
+        }
       } else {
-        const errorData = await response.json();
-        alert(`Error deleting product: ${errorData.message || 'Unknown error'}`);
+        // Remove from mock data
+        setProducts(products.filter(product => product._id !== id));
       }
     } catch (error) {
       console.error('Error deleting product:', error);
@@ -278,19 +311,74 @@ const Products = () => {
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const FileUploadArea = ({ onFileSelect, selectedFile }: { onFileSelect: (file: File) => void, selectedFile: File | null }) => (
+    <div className="space-y-4">
+      <div
+        className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-indigo-400 transition-colors cursor-pointer"
+        onClick={() => document.getElementById('file-input')?.click()}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          const files = e.dataTransfer.files;
+          if (files.length > 0) {
+            onFileSelect(files[0]);
+          }
+        }}
+      >
+        <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+        <p className="text-gray-600">
+          {selectedFile ? selectedFile.name : 'Click to upload or drag and drop'}
+        </p>
+        <p className="text-sm text-gray-500 mt-2">PNG, JPG, GIF up to 10MB</p>
+        <input
+          id="file-input"
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onFileSelect(file);
+          }}
+          className="hidden"
+        />
+      </div>
+      
+      <div className="text-center text-gray-500">OR</div>
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+        <input
+          type="url"
+          placeholder="https://example.com/image.jpg"
+          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
+          disabled={!!selectedFile}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">Manage Products</h2>
-        <motion.button 
-          onClick={handleAddProduct}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg"
+        <div>
+          <h2 className="text-2xl font-bold">Manage Products</h2>
+          <div className="flex items-center gap-2 mt-2">
+            <div className={`w-3 h-3 rounded-full ${
+              connectionStatus === 'connected' ? 'bg-green-500' : 
+              connectionStatus === 'disconnected' ? 'bg-red-500' : 'bg-yellow-500'
+            }`} />
+            <span className="text-sm text-gray-600">
+              {connectionStatus === 'connected' ? 'Connected to backend' : 
+               connectionStatus === 'disconnected' ? 'Using offline mode' : 'Checking connection...'}
+            </span>
+          </div>
+        </div>
+        <button 
+          onClick={() => setIsAddModalOpen(true)}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors"
         >
           <Plus className="h-4 w-4" />
           Add Product
-        </motion.button>
+        </button>
       </div>
 
       <div className="mb-4 relative">
@@ -345,24 +433,20 @@ const Products = () => {
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${product.price}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.stock || 0}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <motion.button 
+                  <button 
                     onClick={() => handleEditProduct(product)}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="text-indigo-600 hover:text-indigo-900 mr-3 p-2 rounded-full hover:bg-indigo-50 transition-colors"
+                    className="text-indigo-600 hover:text-indigo-900 mr-3 p-1 rounded hover:bg-indigo-50 transition-colors"
                     title="Edit product"
                   >
                     <Pencil className="h-4 w-4" />
-                  </motion.button>
-                  <motion.button 
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="text-red-600 hover:text-red-900 p-2 rounded-full hover:bg-red-50 transition-colors"
+                  </button>
+                  <button 
+                    className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
                     onClick={() => handleDeleteProduct(product._id)}
                     title="Delete product"
                   >
                     <Trash2 className="h-4 w-4" />
-                  </motion.button>
+                  </button>
                 </td>
               </tr>
             ))}
@@ -379,74 +463,68 @@ const Products = () => {
         <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
           <Dialog.Panel className="mx-auto max-w-lg w-full rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <Dialog.Title className="text-xl font-semibold text-gray-900">
+            <div className="flex justify-between items-center mb-4">
+              <Dialog.Title className="text-lg font-medium text-gray-900">
                 Add New Product
               </Dialog.Title>
               <button
                 onClick={() => setIsAddModalOpen(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <X className="h-6 w-6" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateProduct} className="space-y-4">
+            <form onSubmit={handleAddProduct} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                 <input
                   type="text"
                   value={newProduct.name}
                   onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="Enter product name"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                 <textarea
                   value={newProduct.description}
                   onChange={(e) => setNewProduct({...newProduct, description: e.target.value})}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   rows={3}
-                  placeholder="Enter product description"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
                   <input
                     type="number"
                     step="0.01"
-                    min="0"
                     value={newProduct.price}
-                    onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value) || 0})}
+                    onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value)})}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="0.00"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Stock *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Stock</label>
                   <input
                     type="number"
-                    min="0"
                     value={newProduct.stock}
-                    onChange={(e) => setNewProduct({...newProduct, stock: parseInt(e.target.value) || 0})}
+                    onChange={(e) => setNewProduct({...newProduct, stock: parseInt(e.target.value)})}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="0"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                 <select
                   value={newProduct.category}
                   onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}
@@ -457,69 +535,18 @@ const Products = () => {
                   <option value="Pens">Pens</option>
                   <option value="Paper">Paper</option>
                   <option value="Art Supplies">Art Supplies</option>
-                  <option value="Office Supplies">Office Supplies</option>
-                  <option value="Accessories">Accessories</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Product Image</label>
-                
-                {/* File Upload */}
-                <div className="mb-3">
-                  <label className="flex items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <Upload className="w-8 h-8 mb-2 text-gray-400" />
-                      <p className="mb-2 text-sm text-gray-500">
-                        <span className="font-semibold">Click to upload</span> or drag and drop
-                      </p>
-                      <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
-                    </div>
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept="image/*"
-                      onChange={(e) => handleFileSelect(e)}
-                    />
-                  </label>
-                </div>
-
-                {/* OR divider */}
-                <div className="relative mb-3">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-300" />
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-gray-500">OR</span>
-                  </div>
-                </div>
-
-                {/* URL Input */}
-                <input
-                  type="url"
-                  value={selectedFile ? '' : newProduct.image}
-                  onChange={(e) => handleImageUrlChange(e.target.value)}
-                  disabled={!!selectedFile}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
-                  placeholder="https://example.com/image.jpg"
+                <label className="block text-sm font-medium text-gray-700 mb-3">Product Image</label>
+                <FileUploadArea 
+                  onFileSelect={setSelectedFile} 
+                  selectedFile={selectedFile}
                 />
-
-                {imagePreview && (
-                  <div className="mt-3">
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="w-24 h-24 object-cover rounded-md border"
-                      onError={() => setImagePreview('')}
-                    />
-                    {selectedFile && (
-                      <p className="text-xs text-gray-500 mt-1">Selected: {selectedFile.name}</p>
-                    )}
-                  </div>
-                )}
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t">
+              <div className="flex justify-end gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
@@ -527,11 +554,10 @@ const Products = () => {
                 >
                   Cancel
                 </button>
-                <motion.button
+                <button
                   type="submit"
                   disabled={isLoading}
-                  whileTap={{ scale: 0.98 }}
-                  className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg"
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
                   {isLoading ? (
                     <>
@@ -540,11 +566,11 @@ const Products = () => {
                     </>
                   ) : (
                     <>
-                      <Plus className="h-4 w-4" />
+                      <Save className="h-4 w-4" />
                       Add Product
                     </>
                   )}
-                </motion.button>
+                </button>
               </div>
             </form>
           </Dialog.Panel>
@@ -560,22 +586,22 @@ const Products = () => {
         <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
           <Dialog.Panel className="mx-auto max-w-lg w-full rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <Dialog.Title className="text-xl font-semibold text-gray-900">
+            <div className="flex justify-between items-center mb-4">
+              <Dialog.Title className="text-lg font-medium text-gray-900">
                 Edit Product
               </Dialog.Title>
               <button
                 onClick={() => setIsEditModalOpen(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <X className="h-6 w-6" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
             {editingProduct && (
               <form onSubmit={handleSaveProduct} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                   <input
                     type="text"
                     value={editingProduct.name}
@@ -586,7 +612,7 @@ const Products = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                   <textarea
                     value={editingProduct.description}
                     onChange={(e) => setEditingProduct({...editingProduct, description: e.target.value})}
@@ -598,25 +624,23 @@ const Products = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
                     <input
                       type="number"
                       step="0.01"
-                      min="0"
                       value={editingProduct.price}
-                      onChange={(e) => setEditingProduct({...editingProduct, price: parseFloat(e.target.value) || 0})}
+                      onChange={(e) => setEditingProduct({...editingProduct, price: parseFloat(e.target.value)})}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Stock *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Stock</label>
                     <input
                       type="number"
-                      min="0"
                       value={editingProduct.stock || 0}
-                      onChange={(e) => setEditingProduct({...editingProduct, stock: parseInt(e.target.value) || 0})}
+                      onChange={(e) => setEditingProduct({...editingProduct, stock: parseInt(e.target.value)})}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       required
                     />
@@ -624,7 +648,7 @@ const Products = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                   <select
                     value={editingProduct.category}
                     onChange={(e) => setEditingProduct({...editingProduct, category: e.target.value})}
@@ -635,69 +659,32 @@ const Products = () => {
                     <option value="Pens">Pens</option>
                     <option value="Paper">Paper</option>
                     <option value="Art Supplies">Art Supplies</option>
-                    <option value="Office Supplies">Office Supplies</option>
-                    <option value="Accessories">Accessories</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Product Image</label>
-                  
-                  {/* File Upload */}
-                  <div className="mb-3">
-                    <label className="flex items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        <Upload className="w-8 h-8 mb-2 text-gray-400" />
-                        <p className="mb-2 text-sm text-gray-500">
-                          <span className="font-semibold">Click to upload new image</span>
-                        </p>
-                        <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
-                      </div>
-                      <input
-                        type="file"
-                        className="hidden"
-                        accept="image/*"
-                        onChange={(e) => handleFileSelect(e, true)}
-                      />
-                    </label>
-                  </div>
-
-                  {/* OR divider */}
-                  <div className="relative mb-3">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-300" />
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-2 bg-white text-gray-500">OR</span>
-                    </div>
-                  </div>
-
-                  {/* URL Input */}
-                  <input
-                    type="url"
-                    value={selectedFile ? '' : editingProduct.image}
-                    onChange={(e) => handleImageUrlChange(e.target.value, true)}
-                    disabled={!!selectedFile}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
-                    placeholder="https://example.com/image.jpg"
+                  <label className="block text-sm font-medium text-gray-700 mb-3">Product Image</label>
+                  <FileUploadArea 
+                    onFileSelect={setSelectedFile} 
+                    selectedFile={selectedFile}
                   />
-
-                  {imagePreview && (
-                    <div className="mt-3">
-                      <img
-                        src={imagePreview}
-                        alt="Preview"
-                        className="w-24 h-24 object-cover rounded-md border"
-                        onError={() => setImagePreview('')}
+                  {editingProduct.image && !selectedFile && (
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-600">Current image:</p>
+                      <img 
+                        src={editingProduct.image.startsWith('http') ? editingProduct.image : `http://localhost:5000/uploads/${editingProduct.image}`}
+                        alt="Current product"
+                        className="w-20 h-20 object-cover rounded-md mt-1"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&q=80&w=100';
+                        }}
                       />
-                      {selectedFile && (
-                        <p className="text-xs text-gray-500 mt-1">Selected: {selectedFile.name}</p>
-                      )}
                     </div>
                   )}
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4 border-t">
+                <div className="flex justify-end gap-3 pt-4">
                   <button
                     type="button"
                     onClick={() => setIsEditModalOpen(false)}
@@ -705,11 +692,10 @@ const Products = () => {
                   >
                     Cancel
                   </button>
-                  <motion.button
+                  <button
                     type="submit"
                     disabled={isLoading}
-                    whileTap={{ scale: 0.98 }}
-                    className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg"
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
                   >
                     {isLoading ? (
                       <>
@@ -722,7 +708,7 @@ const Products = () => {
                         Save Changes
                       </>
                     )}
-                  </motion.button>
+                  </button>
                 </div>
               </form>
             )}
@@ -735,140 +721,174 @@ const Products = () => {
 
 const BlogPosts = () => {
   const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [loading, setLoading] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
-  const [newPost, setNewPost] = useState<Omit<BlogPost, '_id'>>({
+  const [newPost, setNewPost] = useState({
     title: '',
     content: '',
-    date: new Date().toISOString().split('T')[0],
     author: '',
+    date: new Date().toISOString().split('T')[0],
     image: '',
   });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
 
-  const fetchBlogPosts = async () => {
+  const checkConnection = async () => {
     try {
-      setLoading(true);
       const response = await fetch('http://localhost:5000/blog/getblogs');
-      if (!response.ok) throw new Error('Failed to fetch blog posts');
-      const data = await response.json();
+      if (response.ok) {
+        setConnectionStatus('connected');
+        return true;
+      } else {
+        setConnectionStatus('disconnected');
+        return false;
+      }
+    } catch (error) {
+      setConnectionStatus('disconnected');
+      return false;
+    }
+  };
+
+  const fetchPosts = async () => {
+    try {
+      setIsLoading(true);
+      const isConnected = await checkConnection();
       
-      // Handle different possible response structures
-      const postsArray = data.blogs || data.data || data || [];
-      setPosts(Array.isArray(postsArray) ? postsArray : []);
+      if (isConnected) {
+        const response = await fetch('http://localhost:5000/blog/getblogs');
+        const data = await response.json();
+        
+        const postsArray = data.blogs || data.data || data || [];
+        setPosts(Array.isArray(postsArray) ? postsArray : []);
+      } else {
+        // Mock data when backend is not available
+        setPosts([
+          {
+            _id: 'mock-1',
+            title: 'The Art of Journaling',
+            content: 'Discover the therapeutic benefits of daily journaling and how it can enhance your creativity and productivity...',
+            date: '2024-01-15',
+            author: 'John Doe',
+            image: 'https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&q=80',
+          },
+          {
+            _id: 'mock-2',
+            title: 'Choosing the Perfect Fountain Pen',
+            content: 'A comprehensive guide to selecting your ideal fountain pen based on writing style, nib size, and personal preferences...',
+            date: '2024-01-10',
+            author: 'Jane Smith',
+            image: 'https://images.unsplash.com/photo-1585336261022-680e295ce3fe?auto=format&fit=crop&q=80',
+          },
+        ]);
+      }
     } catch (error) {
       console.error('Error fetching blog posts:', error);
-      // Fallback to sample data
-      setPosts([
-        {
-          _id: '1',
-          title: 'The Art of Journaling',
-          content: 'Discover the therapeutic benefits of daily journaling...',
-          date: '2024-01-15',
-          author: 'John Doe',
-        },
-      ]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchBlogPosts();
+    fetchPosts();
   }, []);
+
+  const handleAddPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      if (connectionStatus === 'connected') {
+        const token = localStorage.getItem('adminToken');
+        const response = await fetch('http://localhost:5000/blog/addblogs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(newPost),
+        });
+
+        if (response.ok) {
+          await fetchPosts();
+        } else {
+          const errorData = await response.json();
+          alert(`Error: ${errorData.message || 'Failed to add blog post'}`);
+        }
+      } else {
+        // Add to mock data
+        const mockPost = {
+          ...newPost,
+          _id: `mock-${Date.now()}`,
+        };
+        setPosts(prev => [...prev, mockPost]);
+      }
+
+      // Reset form
+      setNewPost({
+        title: '',
+        content: '',
+        author: '',
+        date: new Date().toISOString().split('T')[0],
+        image: '',
+      });
+      setIsAddModalOpen(false);
+    } catch (error) {
+      console.error('Error adding blog post:', error);
+      alert('Error adding blog post. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleEditPost = (post: BlogPost) => {
     setEditingPost(post);
     setIsEditModalOpen(true);
   };
 
-  const handleAddPost = () => {
-    setNewPost({
-      title: '',
-      content: '',
-      date: new Date().toISOString().split('T')[0],
-      author: '',
-      image: '',
-    });
-    setIsAddModalOpen(true);
-  };
-
   const handleSavePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPost) return;
 
-    setIsSubmitting(true);
+    setIsLoading(true);
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`http://localhost:5000/blog/updateblog/${editingPost._id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          title: editingPost.title,
-          content: editingPost.content,
-          author: editingPost.author,
-          date: editingPost.date,
-          image: editingPost.image,
-        }),
-      });
+      if (connectionStatus === 'connected') {
+        const token = localStorage.getItem('adminToken');
+        const response = await fetch(`http://localhost:5000/blog/updateblog/${editingPost._id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            title: editingPost.title,
+            content: editingPost.content,
+            author: editingPost.author,
+            date: editingPost.date,
+            image: editingPost.image,
+          }),
+        });
 
-      if (response.ok) {
-        await fetchBlogPosts();
-        setIsEditModalOpen(false);
-        setEditingPost(null);
-        alert('Blog post updated successfully!');
+        if (response.ok) {
+          await fetchPosts();
+        } else {
+          const errorData = await response.json();
+          alert(`Error: ${errorData.message || 'Failed to update blog post'}`);
+        }
       } else {
-        const errorData = await response.json();
-        alert(`Error updating blog post: ${errorData.message || 'Unknown error'}`);
+        // Update mock data
+        setPosts(prev => prev.map(p => 
+          p._id === editingPost._id ? editingPost : p
+        ));
       }
+
+      setIsEditModalOpen(false);
+      setEditingPost(null);
     } catch (error) {
       console.error('Error updating blog post:', error);
       alert('Error updating blog post. Please try again.');
     } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCreatePost = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    setIsSubmitting(true);
-    try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('http://localhost:5000/blog/addblogs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(newPost),
-      });
-
-      if (response.ok) {
-        await fetchBlogPosts();
-        setIsAddModalOpen(false);
-        setNewPost({
-          title: '',
-          content: '',
-          date: new Date().toISOString().split('T')[0],
-          author: '',
-          image: '',
-        });
-        alert('Blog post created successfully!');
-      } else {
-        const errorData = await response.json();
-        alert(`Error creating blog post: ${errorData.message || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('Error creating blog post:', error);
-      alert('Error creating blog post. Please try again.');
-    } finally {
-      setIsSubmitting(false);
+      setIsLoading(false);
     }
   };
 
@@ -876,20 +896,24 @@ const BlogPosts = () => {
     if (!confirm('Are you sure you want to delete this blog post?')) return;
 
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`http://localhost:5000/blog/deleteblog/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      if (connectionStatus === 'connected') {
+        const token = localStorage.getItem('adminToken');
+        const response = await fetch(`http://localhost:5000/blog/deleteblog/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
 
-      if (response.ok) {
-        setPosts(posts.filter(post => post._id !== id));
-        alert('Blog post deleted successfully!');
+        if (response.ok) {
+          setPosts(posts.filter(post => post._id !== id));
+        } else {
+          const errorData = await response.json();
+          alert(`Error: ${errorData.message || 'Failed to delete blog post'}`);
+        }
       } else {
-        const errorData = await response.json();
-        alert(`Error deleting blog post: ${errorData.message || 'Unknown error'}`);
+        // Remove from mock data
+        setPosts(posts.filter(post => post._id !== id));
       }
     } catch (error) {
       console.error('Error deleting blog post:', error);
@@ -900,61 +924,65 @@ const BlogPosts = () => {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">Manage Blog Posts</h2>
-        <motion.button 
-          onClick={handleAddPost}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg"
+        <div>
+          <h2 className="text-2xl font-bold">Manage Blog Posts</h2>
+          <div className="flex items-center gap-2 mt-2">
+            <div className={`w-3 h-3 rounded-full ${
+              connectionStatus === 'connected' ? 'bg-green-500' : 
+              connectionStatus === 'disconnected' ? 'bg-red-500' : 'bg-yellow-500'
+            }`} />
+            <span className="text-sm text-gray-600">
+              {connectionStatus === 'connected' ? 'Connected to backend' : 
+               connectionStatus === 'disconnected' ? 'Using offline mode' : 'Checking connection...'}
+            </span>
+          </div>
+        </div>
+        <button 
+          onClick={() => setIsAddModalOpen(true)}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors"
         >
           <Plus className="h-4 w-4" />
           New Post
-        </motion.button>
+        </button>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {posts.map((post) => (
-            <div key={post._id} className="bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="text-lg font-semibold">{post.title}</h3>
-                  <p className="text-sm text-gray-500 mt-1">
-                    By {post.author} • {new Date(post.date).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <motion.button 
-                    onClick={() => handleEditPost(post)}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="text-indigo-600 hover:text-indigo-900 p-2 rounded-full hover:bg-indigo-50 transition-colors"
-                    title="Edit post"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </motion.button>
-                  <motion.button 
-                    onClick={() => handleDeletePost(post._id)}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="text-red-600 hover:text-red-900 p-2 rounded-full hover:bg-red-50 transition-colors"
-                    title="Delete post"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </motion.button>
-                </div>
+      <div className="space-y-4">
+        {posts.map((post) => (
+          <div key={post._id} className="bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start">
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold">{post.title}</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  By {post.author} • {new Date(post.date).toLocaleDateString()}
+                </p>
+                <p className="mt-2 text-gray-600 line-clamp-2">{post.content}</p>
               </div>
-              <p className="mt-2 text-gray-600 line-clamp-2">{post.content}</p>
+              <div className="flex gap-2 ml-4">
+                <motion.button 
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleEditPost(post)}
+                  className="text-indigo-600 hover:text-indigo-900 p-2 rounded-full hover:bg-indigo-50 transition-colors"
+                  title="Edit post"
+                >
+                  <Pencil className="h-4 w-4" />
+                </motion.button>
+                <motion.button 
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleDeletePost(post._id)}
+                  className="text-red-600 hover:text-red-900 p-2 rounded-full hover:bg-red-50 transition-colors"
+                  title="Delete post"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </motion.button>
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
 
-      {/* Add Blog Post Modal */}
+      {/* Add Post Modal */}
       <Dialog
         open={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
@@ -975,25 +1003,25 @@ const BlogPosts = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreatePost} className="space-y-4">
+            <form onSubmit={handleAddPost} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
                 <input
                   type="text"
                   value={newPost.title}
                   onChange={(e) => setNewPost({...newPost, title: e.target.value})}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="Enter blog post title"
+                  className="w-full border border-gray-300 rounded-md px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-lg"
+                  placeholder="Enter blog post title..."
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Content</label>
                 <textarea
                   value={newPost.content}
                   onChange={(e) => setNewPost({...newPost, content: e.target.value})}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full border border-gray-300 rounded-md px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   rows={8}
                   placeholder="Write your blog post content here..."
                   required
@@ -1002,37 +1030,43 @@ const BlogPosts = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Author *</label>
-                  <input
-                    type="text"
-                    value={newPost.author}
-                    onChange={(e) => setNewPost({...newPost, author: e.target.value})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="Author name"
-                    required
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Author</label>
+                  <div className="relative">
+                    <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <input
+                      type="text"
+                      value={newPost.author}
+                      onChange={(e) => setNewPost({...newPost, author: e.target.value})}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      placeholder="Author name"
+                      required
+                    />
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
-                  <input
-                    type="date"
-                    value={newPost.date}
-                    onChange={(e) => setNewPost({...newPost, date: e.target.value})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    required
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <input
+                      type="date"
+                      value={newPost.date}
+                      onChange={(e) => setNewPost({...newPost, date: e.target.value})}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Featured Image URL</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Featured Image URL (Optional)</label>
                 <input
                   type="url"
                   value={newPost.image}
                   onChange={(e) => setNewPost({...newPost, image: e.target.value})}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="https://example.com/image.jpg (optional)"
+                  className="w-full border border-gray-300 rounded-md px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="https://example.com/image.jpg"
                 />
               </div>
 
@@ -1040,35 +1074,34 @@ const BlogPosts = () => {
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                  className="px-6 py-3 text-gray-600 hover:text-gray-800 transition-colors"
                 >
                   Cancel
                 </button>
-                <motion.button
+                <button
                   type="submit"
-                  disabled={isSubmitting}
-                  whileTap={{ scale: 0.98 }}
-                  className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg"
+                  disabled={isLoading}
+                  className="px-6 py-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
-                  {isSubmitting ? (
+                  {isLoading ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Creating...
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      Publishing...
                     </>
                   ) : (
                     <>
-                      <Plus className="h-4 w-4" />
-                      Create Post
+                      <Save className="h-5 w-5" />
+                      Publish Post
                     </>
                   )}
-                </motion.button>
+                </button>
               </div>
             </form>
           </Dialog.Panel>
         </div>
       </Dialog>
 
-      {/* Edit Blog Post Modal */}
+      {/* Edit Post Modal */}
       <Dialog
         open={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
@@ -1090,24 +1123,24 @@ const BlogPosts = () => {
             </div>
 
             {editingPost && (
-              <form onSubmit={handleSavePost} className="space-y-4">
+              <form onSubmit={handleSavePost} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
                   <input
                     type="text"
                     value={editingPost.title}
                     onChange={(e) => setEditingPost({...editingPost, title: e.target.value})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full border border-gray-300 rounded-md px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-lg"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Content</label>
                   <textarea
                     value={editingPost.content}
                     onChange={(e) => setEditingPost({...editingPost, content: e.target.value})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full border border-gray-300 rounded-md px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     rows={8}
                     required
                   />
@@ -1115,36 +1148,42 @@ const BlogPosts = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Author *</label>
-                    <input
-                      type="text"
-                      value={editingPost.author}
-                      onChange={(e) => setEditingPost({...editingPost, author: e.target.value})}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      required
-                    />
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Author</label>
+                    <div className="relative">
+                      <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                      <input
+                        type="text"
+                        value={editingPost.author}
+                        onChange={(e) => setEditingPost({...editingPost, author: e.target.value})}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
-                    <input
-                      type="date"
-                      value={editingPost.date}
-                      onChange={(e) => setEditingPost({...editingPost, date: e.target.value})}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      required
-                    />
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                      <input
+                        type="date"
+                        value={editingPost.date}
+                        onChange={(e) => setEditingPost({...editingPost, date: e.target.value})}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Featured Image URL</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Featured Image URL (Optional)</label>
                   <input
                     type="url"
                     value={editingPost.image || ''}
                     onChange={(e) => setEditingPost({...editingPost, image: e.target.value})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="https://example.com/image.jpg (optional)"
+                    className="w-full border border-gray-300 rounded-md px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="https://example.com/image.jpg"
                   />
                 </div>
 
@@ -1152,28 +1191,27 @@ const BlogPosts = () => {
                   <button
                     type="button"
                     onClick={() => setIsEditModalOpen(false)}
-                    className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                    className="px-6 py-3 text-gray-600 hover:text-gray-800 transition-colors"
                   >
                     Cancel
                   </button>
-                  <motion.button
+                  <button
                     type="submit"
-                    disabled={isSubmitting}
-                    whileTap={{ scale: 0.98 }}
-                    className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg"
+                    disabled={isLoading}
+                    className="px-6 py-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
                   >
-                    {isSubmitting ? (
+                    {isLoading ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                         Saving...
                       </>
                     ) : (
                       <>
-                        <Save className="h-4 w-4" />
+                        <Save className="h-5 w-5" />
                         Save Changes
                       </>
                     )}
-                  </motion.button>
+                  </button>
                 </div>
               </form>
             )}
@@ -1188,44 +1226,77 @@ const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
 
-  const fetchOrders = async () => {
+  const checkConnection = async () => {
     try {
-      setLoading(true);
       const token = localStorage.getItem('adminToken');
       const response = await fetch('http://localhost:5000/api/getorders', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
+      if (response.ok) {
+        setConnectionStatus('connected');
+        return true;
+      } else {
+        setConnectionStatus('disconnected');
+        return false;
+      }
+    } catch (error) {
+      setConnectionStatus('disconnected');
+      return false;
+    }
+  };
+
+  const fetchOrders = async () => {
+    try {
+      const isConnected = await checkConnection();
       
-      if (!response.ok) throw new Error('Failed to fetch orders');
-      const data = await response.json();
-      
-      // Handle different possible response structures
-      const ordersArray = data.orders || data.data || data || [];
-      setOrders(Array.isArray(ordersArray) ? ordersArray : []);
+      if (isConnected) {
+        const token = localStorage.getItem('adminToken');
+        const response = await fetch('http://localhost:5000/api/getorders', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        const data = await response.json();
+        
+        const ordersArray = data.orders || data.data || data || [];
+        setOrders(Array.isArray(ordersArray) ? ordersArray : []);
+      } else {
+        // Mock data when backend is not available
+        setOrders([
+          {
+            _id: 'mock-1',
+            name: 'Alice Johnson',
+            phone: '+1234567890',
+            address: '123 Main St, City',
+            deliveryArea: 'Tartous',
+            items: [
+              { productId: '1', productName: 'Premium Notebook', quantity: 2, price: 24.99 }
+            ],
+            total: 54.98,
+            status: 'pending',
+            createdAt: '2024-01-20T10:00:00Z',
+          },
+          {
+            _id: 'mock-2',
+            name: 'Bob Smith',
+            phone: '+0987654321',
+            address: '456 Oak Ave, Town',
+            deliveryArea: 'Latakia',
+            items: [
+              { productId: '2', productName: 'Fountain Pen Set', quantity: 1, price: 45.99 }
+            ],
+            total: 52.99,
+            status: 'processing',
+            createdAt: '2024-01-19T14:30:00Z',
+          },
+        ]);
+      }
     } catch (error) {
       console.error('Error fetching orders:', error);
-      // Mock data for development
-      setOrders([
-        {
-          _id: '1',
-          name: 'Alice Johnson',
-          phone: '+1234567890',
-          address: '123 Main St, City',
-          deliveryArea: 'Tartous',
-          items: [
-            { productId: '1', productName: 'Premium Notebook', quantity: 2, price: 24.99 }
-          ],
-          total: 54.98,
-          status: 'pending',
-          createdAt: '2024-01-20T10:00:00Z',
-        },
-      ]);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -1240,24 +1311,30 @@ const Orders = () => {
 
   const updateOrderStatus = async (orderId: string, status: Order['status']) => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`http://localhost:5000/api/orders/${orderId}/status`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status }),
-      });
+      if (connectionStatus === 'connected') {
+        const token = localStorage.getItem('adminToken');
+        const response = await fetch(`http://localhost:5000/admin/orders/${orderId}/status`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status }),
+        });
 
-      if (response.ok) {
+        if (response.ok) {
+          setOrders(orders.map(order => 
+            order._id === orderId ? { ...order, status } : order
+          ));
+        } else {
+          const errorData = await response.json();
+          alert(`Error: ${errorData.message || 'Failed to update order status'}`);
+        }
+      } else {
+        // Update mock data
         setOrders(orders.map(order => 
           order._id === orderId ? { ...order, status } : order
         ));
-        alert('Order status updated successfully!');
-      } else {
-        const errorData = await response.json();
-        alert(`Error updating order status: ${errorData.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error updating order status:', error);
@@ -1277,63 +1354,69 @@ const Orders = () => {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Manage Orders</h2>
-      
-      {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-2xl font-bold">Manage Orders</h2>
+          <div className="flex items-center gap-2 mt-2">
+            <div className={`w-3 h-3 rounded-full ${
+              connectionStatus === 'connected' ? 'bg-green-500' : 
+              connectionStatus === 'disconnected' ? 'bg-red-500' : 'bg-yellow-500'
+            }`} />
+            <span className="text-sm text-gray-600">
+              {connectionStatus === 'connected' ? 'Connected to backend' : 
+               connectionStatus === 'disconnected' ? 'Using offline mode' : 'Checking connection...'}
+            </span>
+          </div>
         </div>
-      ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {orders.map((order) => (
+              <tr key={order._id} className="hover:bg-gray-50">
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{order._id.slice(-6)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.name}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {new Date(order.createdAt).toLocaleDateString()}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <select
+                    value={order.status}
+                    onChange={(e) => updateOrderStatus(order._id, e.target.value as Order['status'])}
+                    className={`px-2 py-1 text-xs leading-5 font-semibold rounded-full border-0 ${getStatusColor(order.status)}`}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="processing">Processing</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${order.total.toFixed(2)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  <button 
+                    onClick={() => handleViewOrder(order)}
+                    className="text-indigo-600 hover:text-indigo-900 flex items-center gap-1 p-1 rounded hover:bg-indigo-50 transition-colors"
+                  >
+                    <Eye className="h-4 w-4" />
+                    View Details
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {orders.map((order) => (
-                <tr key={order._id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{order._id.slice(-6)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(order.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <select
-                      value={order.status}
-                      onChange={(e) => updateOrderStatus(order._id, e.target.value as Order['status'])}
-                      className={`px-2 py-1 text-xs leading-5 font-semibold rounded-full border-0 ${getStatusColor(order.status)}`}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="processing">Processing</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${order.total.toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <motion.button 
-                      onClick={() => handleViewOrder(order)}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="text-indigo-600 hover:text-indigo-900 flex items-center gap-1 p-2 rounded-full hover:bg-indigo-50 transition-colors"
-                    >
-                      <Eye className="h-4 w-4" />
-                      View Details
-                    </motion.button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {/* Order Details Modal */}
       <Dialog
