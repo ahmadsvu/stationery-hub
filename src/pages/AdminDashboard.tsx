@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Package, FileText, ShoppingBag, Plus, Pencil, Trash2, Search, LogOut, Eye, X, Save, Upload, RefreshCw, Wifi, WifiOff, AlertCircle } from 'lucide-react';
+import { Package, FileText, ShoppingBag, Plus, Pencil, Trash2, Search, LogOut, Eye, X, Save, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog } from '@headlessui/react';
 
@@ -23,21 +23,24 @@ interface BlogPost {
   image?: string;
 }
 
+interface OrderItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  price: number;
+}
+
 interface Order {
   _id: string;
   name: string;
   phone: string;
   address: string;
-  deliveryArea: string;
-  items: Array<{
-    productId: string;
-    productName: string;
-    quantity: number;
-    price: number;
-  }>;
+  deliveryArea?: string;
+  products: OrderItem[]; // Updated to match your backend response
   total: number;
   status: 'pending' | 'processing' | 'completed' | 'cancelled';
   createdAt: string;
+  __v?: number;
 }
 
 const Products = () => {
@@ -46,92 +49,60 @@ const Products = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [newProduct, setNewProduct] = useState<Omit<Product, '_id'>>({
+  const [newProduct, setNewProduct] = useState({
     name: '',
     description: '',
     price: 0,
-    image: '',
     category: 'Notebooks',
     stock: 0,
+    image: null as File | null,
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'checking'>('checking');
-
-  const checkConnection = async () => {
-    try {
-      setConnectionStatus('checking');
-      const response = await fetch('http://localhost:5000/product/get', { 
-        method: 'HEAD',
-        signal: AbortSignal.timeout(5000)
-      });
-      setConnectionStatus(response.ok ? 'online' : 'offline');
-      return response.ok;
-    } catch (error) {
-      setConnectionStatus('offline');
-      return false;
-    }
-  };
 
   const fetchProducts = async () => {
     try {
-      setIsLoading(true);
       const response = await fetch('http://localhost:5000/product/get');
-      if (!response.ok) throw new Error('Failed to fetch products');
       const data = await response.json();
-      
-      // Handle different possible response structures
       const productsArray = data.products || data.data || data || [];
       setProducts(Array.isArray(productsArray) ? productsArray : []);
-      setConnectionStatus('online');
     } catch (error) {
       console.error('Error fetching products:', error);
-      setConnectionStatus('offline');
-      // Fallback to sample data
-      setProducts([
-        {
-          _id: 'sample-1',
-          name: 'Premium Notebook',
-          description: 'High-quality paper notebook with leather cover',
-          price: 24.99,
-          image: 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&q=80&w=400',
-          category: 'Notebooks',
-          stock: 50,
-        },
-        {
-          _id: 'sample-2',
-          name: 'Fountain Pen Set',
-          description: 'Elegant fountain pen with multiple ink cartridges',
-          price: 45.99,
-          image: 'https://images.unsplash.com/photo-1585336261022-680e295ce3fe?auto=format&fit=crop&q=80&w=400',
-          category: 'Pens',
-          stock: 25,
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
     }
   };
 
   useEffect(() => {
     fetchProducts();
-    
-    // Check connection every 30 seconds
-    const interval = setInterval(checkConnection, 30000);
-    return () => clearInterval(interval);
   }, []);
 
-  const handleAddProduct = async (e: React.FormEvent) => {
+  const handleAddProduct = () => {
+    setNewProduct({
+      name: '',
+      description: '',
+      price: 0,
+      category: 'Notebooks',
+      stock: 0,
+      image: null,
+    });
+    setIsAddModalOpen(true);
+  };
+
+  const handleSaveNewProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      const token = localStorage.getItem('adminToken');
       const formData = new FormData();
+      formData.append('name', newProduct.name);
+      formData.append('description', newProduct.description);
+      formData.append('price', newProduct.price.toString());
+      formData.append('category', newProduct.category);
+      formData.append('stock', newProduct.stock.toString());
       
-      Object.entries(newProduct).forEach(([key, value]) => {
-        formData.append(key, value.toString());
-      });
+      if (newProduct.image) {
+        formData.append('image', newProduct.image);
+      }
 
+      const token = localStorage.getItem('adminToken');
       const response = await fetch('http://localhost:5000/product/add', {
         method: 'POST',
         headers: {
@@ -147,17 +118,13 @@ const Products = () => {
           name: '',
           description: '',
           price: 0,
-          image: '',
           category: 'Notebooks',
           stock: 0,
+          image: null,
         });
-      } else {
-        const errorData = await response.json();
-        alert(`Error adding product: ${errorData.message || 'Please try again.'}`);
       }
     } catch (error) {
       console.error('Error adding product:', error);
-      alert('Error adding product. Please check your connection.');
     } finally {
       setIsLoading(false);
     }
@@ -194,13 +161,9 @@ const Products = () => {
         await fetchProducts();
         setIsEditModalOpen(false);
         setEditingProduct(null);
-      } else {
-        const errorData = await response.json();
-        alert(`Error updating product: ${errorData.message || 'Please try again.'}`);
       }
     } catch (error) {
       console.error('Error updating product:', error);
-      alert('Error updating product. Please check your connection.');
     } finally {
       setIsLoading(false);
     }
@@ -220,29 +183,9 @@ const Products = () => {
 
       if (response.ok) {
         setProducts(products.filter(product => product._id !== id));
-      } else {
-        const errorData = await response.json();
-        alert(`Error deleting product: ${errorData.message || 'Please try again.'}`);
       }
     } catch (error) {
       console.error('Error deleting product:', error);
-      alert('Error deleting product. Please check your connection.');
-    }
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const imageUrl = event.target?.result as string;
-        if (isEdit && editingProduct) {
-          setEditingProduct({ ...editingProduct, image: imageUrl });
-        } else {
-          setNewProduct({ ...newProduct, image: imageUrl });
-        }
-      };
-      reader.readAsDataURL(file);
     }
   };
 
@@ -250,53 +193,17 @@ const Products = () => {
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const ConnectionIndicator = () => (
-    <div className="flex items-center gap-2 text-sm">
-      {connectionStatus === 'online' && (
-        <>
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span className="text-green-600">Online</span>
-        </>
-      )}
-      {connectionStatus === 'offline' && (
-        <>
-          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-          <span className="text-red-600">Offline</span>
-        </>
-      )}
-      {connectionStatus === 'checking' && (
-        <>
-          <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
-          <span className="text-yellow-600">Checking...</span>
-        </>
-      )}
-    </div>
-  );
-
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-bold">Manage Products</h2>
-          <ConnectionIndicator />
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={fetchProducts}
-            className="bg-gray-100 text-gray-700 px-3 py-2 rounded-md flex items-center gap-2 hover:bg-gray-200 transition-colors"
-            disabled={isLoading}
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Add Product
-          </button>
-        </div>
+        <h2 className="text-2xl font-bold">Manage Products</h2>
+        <button 
+          onClick={handleAddProduct}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          Add Product
+        </button>
       </div>
 
       <div className="mb-4 relative">
@@ -380,7 +287,7 @@ const Products = () => {
       >
         <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-md w-full rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+          <Dialog.Panel className="mx-auto max-w-md w-full rounded-lg bg-white p-6 shadow-xl">
             <div className="flex justify-between items-center mb-4">
               <Dialog.Title className="text-lg font-medium text-gray-900">
                 Add New Product
@@ -393,7 +300,7 @@ const Products = () => {
               </button>
             </div>
 
-            <form onSubmit={handleAddProduct} className="space-y-4">
+            <form onSubmit={handleSaveNewProduct} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                 <input
@@ -457,32 +364,33 @@ const Products = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Image</label>
-                <div className="space-y-2">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleImageUpload(e)}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  />
-                  <div className="text-sm text-gray-500 text-center">or</div>
-                  <input
-                    type="url"
-                    placeholder="Enter image URL"
-                    value={newProduct.image}
-                    onChange={(e) => setNewProduct({...newProduct, image: e.target.value})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  />
-                </div>
-                {newProduct.image && (
-                  <div className="mt-2">
-                    <img
-                      src={newProduct.image}
-                      alt="Preview"
-                      className="w-20 h-20 object-cover rounded-md"
-                    />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Product Image</label>
+                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                  <div className="space-y-1 text-center">
+                    <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                    <div className="flex text-sm text-gray-600">
+                      <label className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
+                        <span>Upload a file</span>
+                        <input
+                          type="file"
+                          className="sr-only"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setNewProduct({...newProduct, image: file});
+                            }
+                          }}
+                        />
+                      </label>
+                      <p className="pl-1">or drag and drop</p>
+                    </div>
+                    <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
+                    {newProduct.image && (
+                      <p className="text-sm text-green-600">Selected: {newProduct.image.name}</p>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
@@ -505,7 +413,7 @@ const Products = () => {
                     </>
                   ) : (
                     <>
-                      <Plus className="h-4 w-4" />
+                      <Save className="h-4 w-4" />
                       Add Product
                     </>
                   )}
@@ -524,7 +432,7 @@ const Products = () => {
       >
         <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-md w-full rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+          <Dialog.Panel className="mx-auto max-w-md w-full rounded-lg bg-white p-6 shadow-xl">
             <div className="flex justify-between items-center mb-4">
               <Dialog.Title className="text-lg font-medium text-gray-900">
                 Edit Product
@@ -601,35 +509,6 @@ const Products = () => {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Image</label>
-                  <div className="space-y-2">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleImageUpload(e, true)}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                    <div className="text-sm text-gray-500 text-center">or</div>
-                    <input
-                      type="url"
-                      placeholder="Enter image URL"
-                      value={editingProduct.image}
-                      onChange={(e) => setEditingProduct({...editingProduct, image: e.target.value})}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                  </div>
-                  {editingProduct.image && (
-                    <div className="mt-2">
-                      <img
-                        src={editingProduct.image}
-                        alt="Preview"
-                        className="w-20 h-20 object-cover rounded-md"
-                      />
-                    </div>
-                  )}
-                </div>
-
                 <div className="flex justify-end gap-3 pt-4">
                   <button
                     type="button"
@@ -667,94 +546,73 @@ const Products = () => {
 
 const BlogPosts = () => {
   const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
-  const [newPost, setNewPost] = useState<Omit<BlogPost, '_id'>>({
+  const [newPost, setNewPost] = useState({
     title: '',
     content: '',
-    date: new Date().toISOString().split('T')[0],
     author: '',
-    image: '',
+    image: null as File | null,
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'checking'>('checking');
-
-  const checkConnection = async () => {
-    try {
-      setConnectionStatus('checking');
-      const response = await fetch('http://localhost:5000/blog/getblogs', { 
-        method: 'HEAD',
-        signal: AbortSignal.timeout(5000)
-      });
-      setConnectionStatus(response.ok ? 'online' : 'offline');
-      return response.ok;
-    } catch (error) {
-      setConnectionStatus('offline');
-      return false;
-    }
-  };
 
   const fetchPosts = async () => {
     try {
-      setIsLoading(true);
       const response = await fetch('http://localhost:5000/blog/getblogs');
-      if (!response.ok) throw new Error('Failed to fetch blog posts');
       const data = await response.json();
-      
-      // Handle different possible response structures
       const postsArray = data.blogs || data.data || data || [];
       setPosts(Array.isArray(postsArray) ? postsArray : []);
-      setConnectionStatus('online');
     } catch (error) {
       console.error('Error fetching blog posts:', error);
-      setConnectionStatus('offline');
       // Fallback to sample data
       setPosts([
         {
-          _id: 'sample-1',
+          _id: '1',
           title: 'The Art of Journaling',
-          content: 'Discover the therapeutic benefits of daily journaling and how it can enhance your creativity and productivity...',
+          content: 'Discover the therapeutic benefits of daily journaling...',
           date: '2024-01-15',
           author: 'John Doe',
-          image: 'https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&q=80',
-        },
-        {
-          _id: 'sample-2',
-          title: 'Choosing the Perfect Fountain Pen',
-          content: 'A comprehensive guide to selecting your ideal fountain pen based on writing style, nib preferences, and budget...',
-          date: '2024-01-10',
-          author: 'Jane Smith',
-          image: 'https://images.unsplash.com/photo-1585336261022-680e295ce3fe?auto=format&fit=crop&q=80',
         },
       ]);
-    } finally {
-      setIsLoading(false);
     }
   };
 
   useEffect(() => {
     fetchPosts();
-    
-    // Check connection every 30 seconds
-    const interval = setInterval(checkConnection, 30000);
-    return () => clearInterval(interval);
   }, []);
 
-  const handleAddPost = async (e: React.FormEvent) => {
+  const handleAddPost = () => {
+    setNewPost({
+      title: '',
+      content: '',
+      author: '',
+      image: null,
+    });
+    setIsAddModalOpen(true);
+  };
+
+  const handleSaveNewPost = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
+      const formData = new FormData();
+      formData.append('title', newPost.title);
+      formData.append('content', newPost.content);
+      formData.append('author', newPost.author);
+      
+      if (newPost.image) {
+        formData.append('image', newPost.image);
+      }
+
       const token = localStorage.getItem('adminToken');
-      const response = await fetch('http://localhost:5000/blog/addblogs', {
+      const response = await fetch('http://localhost:5000/blog/addblog', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify(newPost),
+        body: formData,
       });
 
       if (response.ok) {
@@ -763,17 +621,12 @@ const BlogPosts = () => {
         setNewPost({
           title: '',
           content: '',
-          date: new Date().toISOString().split('T')[0],
           author: '',
-          image: '',
+          image: null,
         });
-      } else {
-        const errorData = await response.json();
-        alert(`Error adding blog post: ${errorData.message || 'Please try again.'}`);
       }
     } catch (error) {
       console.error('Error adding blog post:', error);
-      alert('Error adding blog post. Please check your connection.');
     } finally {
       setIsLoading(false);
     }
@@ -801,7 +654,6 @@ const BlogPosts = () => {
           title: editingPost.title,
           content: editingPost.content,
           author: editingPost.author,
-          image: editingPost.image,
         }),
       });
 
@@ -809,13 +661,9 @@ const BlogPosts = () => {
         await fetchPosts();
         setIsEditModalOpen(false);
         setEditingPost(null);
-      } else {
-        const errorData = await response.json();
-        alert(`Error updating blog post: ${errorData.message || 'Please try again.'}`);
       }
     } catch (error) {
       console.error('Error updating blog post:', error);
-      alert('Error updating blog post. Please check your connection.');
     } finally {
       setIsLoading(false);
     }
@@ -835,136 +683,51 @@ const BlogPosts = () => {
 
       if (response.ok) {
         setPosts(posts.filter(post => post._id !== id));
-      } else {
-        const errorData = await response.json();
-        alert(`Error deleting blog post: ${errorData.message || 'Please try again.'}`);
       }
     } catch (error) {
       console.error('Error deleting blog post:', error);
-      alert('Error deleting blog post. Please check your connection.');
     }
   };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const imageUrl = event.target?.result as string;
-        if (isEdit && editingPost) {
-          setEditingPost({ ...editingPost, image: imageUrl });
-        } else {
-          setNewPost({ ...newPost, image: imageUrl });
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const filteredPosts = posts.filter(post =>
-    post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    post.content.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const ConnectionIndicator = () => (
-    <div className="flex items-center gap-2 text-sm">
-      {connectionStatus === 'online' && (
-        <>
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span className="text-green-600">Online</span>
-        </>
-      )}
-      {connectionStatus === 'offline' && (
-        <>
-          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-          <span className="text-red-600">Offline</span>
-        </>
-      )}
-      {connectionStatus === 'checking' && (
-        <>
-          <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
-          <span className="text-yellow-600">Checking...</span>
-        </>
-      )}
-    </div>
-  );
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-bold">Manage Blog Posts</h2>
-          <ConnectionIndicator />
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={fetchPosts}
-            className="bg-gray-100 text-gray-700 px-3 py-2 rounded-md flex items-center gap-2 hover:bg-gray-200 transition-colors"
-            disabled={isLoading}
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            New Post
-          </button>
-        </div>
-      </div>
-
-      <div className="mb-4 relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Search blog posts..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-        />
+        <h2 className="text-2xl font-bold">Manage Blog Posts</h2>
+        <button 
+          onClick={handleAddPost}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          New Post
+        </button>
       </div>
 
       <div className="space-y-4">
-        {filteredPosts.map((post) => (
+        {posts.map((post) => (
           <div key={post._id} className="bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow">
             <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <div className="flex items-center gap-4 mb-2">
-                  {post.image && (
-                    <img
-                      src={post.image}
-                      alt={post.title}
-                      className="w-16 h-16 object-cover rounded-md"
-                    />
-                  )}
-                  <div>
-                    <h3 className="text-lg font-semibold">{post.title}</h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      By {post.author} • {new Date(post.date).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-                <p className="mt-2 text-gray-600 line-clamp-2">{post.content}</p>
+              <div>
+                <h3 className="text-lg font-semibold">{post.title}</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  By {post.author} • {new Date(post.date).toLocaleDateString()}
+                </p>
               </div>
-              <div className="flex gap-2 ml-4">
+              <div className="flex gap-2">
                 <button 
                   onClick={() => handleEditPost(post)}
                   className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
-                  title="Edit post"
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
                 <button 
                   onClick={() => handleDeletePost(post._id)}
                   className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
-                  title="Delete post"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             </div>
+            <p className="mt-2 text-gray-600 line-clamp-2">{post.content}</p>
           </div>
         ))}
       </div>
@@ -990,7 +753,7 @@ const BlogPosts = () => {
               </button>
             </div>
 
-            <form onSubmit={handleAddPost} className="space-y-4">
+            <form onSubmit={handleSaveNewPost} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
                 <input
@@ -1003,67 +766,55 @@ const BlogPosts = () => {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Author</label>
+                <input
+                  type="text"
+                  value={newPost.author}
+                  onChange={(e) => setNewPost({...newPost, author: e.target.value})}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  required
+                />
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
                 <textarea
                   value={newPost.content}
                   onChange={(e) => setNewPost({...newPost, content: e.target.value})}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  rows={6}
+                  rows={8}
                   required
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Author</label>
-                  <input
-                    type="text"
-                    value={newPost.author}
-                    onChange={(e) => setNewPost({...newPost, author: e.target.value})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={newPost.date}
-                    onChange={(e) => setNewPost({...newPost, date: e.target.value})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-              </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Featured Image</label>
-                <div className="space-y-2">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleImageUpload(e)}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  />
-                  <div className="text-sm text-gray-500 text-center">or</div>
-                  <input
-                    type="url"
-                    placeholder="Enter image URL"
-                    value={newPost.image}
-                    onChange={(e) => setNewPost({...newPost, image: e.target.value})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  />
-                </div>
-                {newPost.image && (
-                  <div className="mt-2">
-                    <img
-                      src={newPost.image}
-                      alt="Preview"
-                      className="w-32 h-20 object-cover rounded-md"
-                    />
+                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                  <div className="space-y-1 text-center">
+                    <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                    <div className="flex text-sm text-gray-600">
+                      <label className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
+                        <span>Upload a file</span>
+                        <input
+                          type="file"
+                          className="sr-only"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setNewPost({...newPost, image: file});
+                            }
+                          }}
+                        />
+                      </label>
+                      <p className="pl-1">or drag and drop</p>
+                    </div>
+                    <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
+                    {newPost.image && (
+                      <p className="text-sm text-green-600">Selected: {newPost.image.name}</p>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
@@ -1086,7 +837,7 @@ const BlogPosts = () => {
                     </>
                   ) : (
                     <>
-                      <Plus className="h-4 w-4" />
+                      <Save className="h-4 w-4" />
                       Publish Post
                     </>
                   )}
@@ -1132,67 +883,25 @@ const BlogPosts = () => {
                 </div>
 
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Author</label>
+                  <input
+                    type="text"
+                    value={editingPost.author}
+                    onChange={(e) => setEditingPost({...editingPost, author: e.target.value})}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
                   <textarea
                     value={editingPost.content}
                     onChange={(e) => setEditingPost({...editingPost, content: e.target.value})}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    rows={6}
+                    rows={8}
                     required
                   />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Author</label>
-                    <input
-                      type="text"
-                      value={editingPost.author}
-                      onChange={(e) => setEditingPost({...editingPost, author: e.target.value})}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                    <input
-                      type="date"
-                      value={editingPost.date}
-                      onChange={(e) => setEditingPost({...editingPost, date: e.target.value})}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Featured Image</label>
-                  <div className="space-y-2">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleImageUpload(e, true)}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                    <div className="text-sm text-gray-500 text-center">or</div>
-                    <input
-                      type="url"
-                      placeholder="Enter image URL"
-                      value={editingPost.image || ''}
-                      onChange={(e) => setEditingPost({...editingPost, image: e.target.value})}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                  </div>
-                  {editingPost.image && (
-                    <div className="mt-2">
-                      <img
-                        src={editingPost.image}
-                        alt="Preview"
-                        className="w-32 h-20 object-cover rounded-md"
-                      />
-                    </div>
-                  )}
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4">
@@ -1234,108 +943,58 @@ const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [isLoadingOrder, setIsLoadingOrder] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'checking'>('checking');
-
-  const checkConnection = async () => {
-    try {
-      setConnectionStatus('checking');
-      const response = await fetch('http://localhost:5000/api/getorder', { 
-        method: 'HEAD',
-        signal: AbortSignal.timeout(5000)
-      });
-      setConnectionStatus(response.ok ? 'online' : 'offline');
-      return response.ok;
-    } catch (error) {
-      setConnectionStatus('offline');
-      return false;
-    }
-  };
 
   const fetchOrders = async () => {
     try {
-      setIsLoading(true);
       const token = localStorage.getItem('adminToken');
-      const response = await fetch('http://localhost:5000/api/getorder', {
+      const response = await fetch('http://localhost:5000/admin/orders', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
-      
-      if (!response.ok) throw new Error('Failed to fetch orders');
-      
       const data = await response.json();
-      
-      // Handle different possible response structures
-      const ordersArray = data.orders || data.data || data || [];
-      setOrders(Array.isArray(ordersArray) ? ordersArray : []);
-      setConnectionStatus('online');
+      setOrders(data.orders || []);
     } catch (error) {
       console.error('Error fetching orders:', error);
-      setConnectionStatus('offline');
-      // Fallback to sample data
+      // Mock data for development
       setOrders([
         {
-          _id: 'sample-order-1',
+          _id: '6861c08c7c8e2c92a0018ab0',
           name: 'Alice Johnson',
           phone: '+1234567890',
-          address: '123 Main St, Apartment 4B, Downtown Area',
+          address: '123 Main St, City',
           deliveryArea: 'Tartous',
-          items: [
-            { productId: '1', productName: 'Premium Notebook', quantity: 2, price: 24.99 },
-            { productId: '2', productName: 'Fountain Pen Set', quantity: 1, price: 45.99 }
+          products: [
+            { productId: '1', productName: 'Premium Notebook', quantity: 2, price: 24.99 }
           ],
-          total: 95.97,
+          total: 54.98,
           status: 'pending',
           createdAt: '2024-01-20T10:00:00Z',
         },
-        {
-          _id: 'sample-order-2',
-          name: 'Bob Smith',
-          phone: '+1987654321',
-          address: '456 Oak Avenue, Suite 12, Business District',
-          deliveryArea: 'Damascus',
-          items: [
-            { productId: '3', productName: 'Watercolor Paper Pack', quantity: 3, price: 18.99 }
-          ],
-          total: 68.97,
-          status: 'processing',
-          createdAt: '2024-01-19T14:30:00Z',
-        },
       ]);
-    } finally {
-      setIsLoading(false);
     }
   };
 
   useEffect(() => {
     fetchOrders();
-    
-    // Check connection every 30 seconds
-    const interval = setInterval(checkConnection, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   const handleViewOrder = async (order: Order) => {
+    setIsLoadingOrder(true);
+    setIsOrderModalOpen(true);
+    
     try {
-      setIsLoadingOrder(true);
-      const token = localStorage.getItem('adminToken');
+      // Fetch detailed order information using your new endpoint
+      const response = await fetch(`http://localhost:5000/api/getorder/${order._id}`);
       
-      // Fetch detailed order information using the individual order endpoint
-      const response = await fetch(`http://localhost:5000/api/getorder/${order._id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
       if (response.ok) {
-        const data = await response.json();
-        // Handle different possible response structures
-        const orderData = data.order || data.data || data;
+        const orderData = await response.json();
+        // Your backend returns the order directly, not wrapped in an object
         setSelectedOrder(orderData);
       } else {
         // Fallback to the order data we already have
+        console.warn('Failed to fetch detailed order, using existing data');
         setSelectedOrder(order);
       }
     } catch (error) {
@@ -1344,7 +1003,6 @@ const Orders = () => {
       setSelectedOrder(order);
     } finally {
       setIsLoadingOrder(false);
-      setIsOrderModalOpen(true);
     }
   };
 
@@ -1365,17 +1023,13 @@ const Orders = () => {
           order._id === orderId ? { ...order, status } : order
         ));
         
-        // Update selected order if it's currently being viewed
+        // Update selected order if it's the one being modified
         if (selectedOrder && selectedOrder._id === orderId) {
           setSelectedOrder({ ...selectedOrder, status });
         }
-      } else {
-        const errorData = await response.json();
-        alert(`Error updating order status: ${errorData.message || 'Please try again.'}`);
       }
     } catch (error) {
       console.error('Error updating order status:', error);
-      alert('Error updating order status. Please check your connection.');
     }
   };
 
@@ -1389,56 +1043,9 @@ const Orders = () => {
     }
   };
 
-  const ConnectionIndicator = () => (
-    <div className="flex items-center gap-2 text-sm">
-      {connectionStatus === 'online' && (
-        <>
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span className="text-green-600">Online</span>
-        </>
-      )}
-      {connectionStatus === 'offline' && (
-        <>
-          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-          <span className="text-red-600">Offline</span>
-        </>
-      )}
-      {connectionStatus === 'checking' && (
-        <>
-          <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
-          <span className="text-yellow-600">Checking...</span>
-        </>
-      )}
-    </div>
-  );
-
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-bold">Manage Orders</h2>
-          <ConnectionIndicator />
-        </div>
-        <button
-          onClick={fetchOrders}
-          className="bg-gray-100 text-gray-700 px-3 py-2 rounded-md flex items-center gap-2 hover:bg-gray-200 transition-colors"
-          disabled={isLoading}
-        >
-          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
-
-      {connectionStatus === 'offline' && (
-        <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-3">
-          <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0" />
-          <div>
-            <p className="text-yellow-800 font-medium">Offline Mode</p>
-            <p className="text-yellow-700 text-sm">Showing sample data. Connect to backend to see real orders.</p>
-          </div>
-        </div>
-      )}
-
+      <h2 className="text-2xl font-bold mb-6">Manage Orders</h2>
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -1454,15 +1061,8 @@ const Orders = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {orders.map((order) => (
               <tr key={order._id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  #{order._id.slice(-6)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{order.name}</div>
-                    <div className="text-sm text-gray-500">{order.deliveryArea}</div>
-                  </div>
-                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{order._id.slice(-6)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.name}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {new Date(order.createdAt).toLocaleDateString()}
                 </td>
@@ -1470,7 +1070,7 @@ const Orders = () => {
                   <select
                     value={order.status}
                     onChange={(e) => updateOrderStatus(order._id, e.target.value as Order['status'])}
-                    className={`px-2 py-1 text-xs leading-5 font-semibold rounded-full border-0 ${getStatusColor(order.status)} focus:ring-2 focus:ring-indigo-500`}
+                    className={`px-2 py-1 text-xs leading-5 font-semibold rounded-full border-0 ${getStatusColor(order.status)}`}
                   >
                     <option value="pending">Pending</option>
                     <option value="processing">Processing</option>
@@ -1478,20 +1078,13 @@ const Orders = () => {
                     <option value="cancelled">Cancelled</option>
                   </select>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  ${order.total.toFixed(2)}
-                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${(order.total / 100).toFixed(2)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <button 
                     onClick={() => handleViewOrder(order)}
-                    disabled={isLoadingOrder}
-                    className="text-indigo-600 hover:text-indigo-900 flex items-center gap-1 p-1 rounded hover:bg-indigo-50 transition-colors disabled:opacity-50"
+                    className="text-indigo-600 hover:text-indigo-900 flex items-center gap-1 p-1 rounded hover:bg-indigo-50 transition-colors"
                   >
-                    {isLoadingOrder ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    <Eye className="h-4 w-4" />
                     View Details
                   </button>
                 </td>
@@ -1512,7 +1105,7 @@ const Orders = () => {
           <Dialog.Panel className="mx-auto max-w-2xl w-full rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <Dialog.Title className="text-xl font-semibold text-gray-900">
-                Order Details #{selectedOrder?._id.slice(-6)}
+                {selectedOrder ? `Order Details #${selectedOrder._id.slice(-6)}` : 'Loading Order...'}
               </Dialog.Title>
               <button
                 onClick={() => setIsOrderModalOpen(false)}
@@ -1522,7 +1115,12 @@ const Orders = () => {
               </button>
             </div>
 
-            {selectedOrder && (
+            {isLoadingOrder ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                <span className="ml-3 text-gray-600">Loading order details...</span>
+              </div>
+            ) : selectedOrder ? (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1530,7 +1128,9 @@ const Orders = () => {
                     <div className="text-sm text-gray-600 space-y-1">
                       <p><strong>Name:</strong> {selectedOrder.name}</p>
                       <p><strong>Phone:</strong> {selectedOrder.phone}</p>
-                      <p><strong>Delivery Area:</strong> {selectedOrder.deliveryArea}</p>
+                      {selectedOrder.deliveryArea && (
+                        <p><strong>Delivery Area:</strong> {selectedOrder.deliveryArea}</p>
+                      )}
                     </div>
                   </div>
                   <div>
@@ -1542,44 +1142,43 @@ const Orders = () => {
                           {selectedOrder.status}
                         </span>
                       </p>
-                      <p><strong>Total:</strong> ${selectedOrder.total.toFixed(2)}</p>
+                      <p><strong>Total:</strong> ${(selectedOrder.total / 100).toFixed(2)}</p>
                     </div>
                   </div>
                 </div>
 
                 <div>
                   <h3 className="font-medium text-gray-900 mb-2">Delivery Address</h3>
-                  <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">{selectedOrder.address}</p>
+                  <p className="text-sm text-gray-600">{selectedOrder.address}</p>
                 </div>
 
                 <div>
                   <h3 className="font-medium text-gray-900 mb-3">Order Items</h3>
-                  <div className="space-y-2">
-                    {selectedOrder.items.map((item, index) => (
-                      <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                        <div>
-                          <p className="font-medium">{item.productName}</p>
-                          <p className="text-sm text-gray-500">
-                            ${item.price.toFixed(2)} × {item.quantity}
-                          </p>
+                  {selectedOrder.products && selectedOrder.products.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedOrder.products.map((item, index) => (
+                        <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                          <div>
+                            <p className="font-medium">{item.productName}</p>
+                            <p className="text-sm text-gray-500">Quantity: {item.quantity}</p>
+                          </div>
+                          <p className="font-medium">${((item.price * item.quantity) / 100).toFixed(2)}</p>
                         </div>
-                        <p className="font-medium">${(item.price * item.quantity).toFixed(2)}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4 pt-4 border-t">
-                    <div className="flex justify-between items-center">
-                      <span className="text-lg font-semibold">Total Amount:</span>
-                      <span className="text-xl font-bold text-indigo-600">${selectedOrder.total.toFixed(2)}</span>
+                      ))}
                     </div>
-                  </div>
+                  ) : (
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-sm text-yellow-800">No product details available for this order.</p>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex justify-end">
+                <div className="border-t pt-4">
+                  <h3 className="font-medium text-gray-900 mb-2">Update Order Status</h3>
                   <select
                     value={selectedOrder.status}
                     onChange={(e) => updateOrderStatus(selectedOrder._id, e.target.value as Order['status'])}
-                    className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   >
                     <option value="pending">Pending</option>
                     <option value="processing">Processing</option>
@@ -1587,6 +1186,10 @@ const Orders = () => {
                     <option value="cancelled">Cancelled</option>
                   </select>
                 </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Failed to load order details.</p>
               </div>
             )}
           </Dialog.Panel>
