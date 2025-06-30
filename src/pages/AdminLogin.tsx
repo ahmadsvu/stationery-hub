@@ -78,7 +78,8 @@ export const AdminLogin = () => {
     setError('');
 
     try {
-      // Attempt database authentication directly
+      console.log('Attempting login with:', { username: formData.username });
+      
       const response = await fetch('http://localhost:5000/admin/login', {
         method: 'POST',
         headers: {
@@ -91,25 +92,64 @@ export const AdminLogin = () => {
         signal: AbortSignal.timeout(10000) // 10 second timeout
       });
 
-      const data = await response.json();
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
-      if (response.ok && data.token) {
-        // Successful authentication
-        localStorage.setItem('adminToken', data.token);
-        localStorage.setItem('adminUser', JSON.stringify(data.admin || { username: formData.username }));
-        
-        // Update connection status to online since login worked
-        setConnectionStatus('online');
-        
-        // Clear form
-        setFormData({ username: '', password: '' });
-        
-        // Navigate to admin dashboard
-        navigate('/admin/products');
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      let data;
+      
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // If not JSON, get text response
+        const textResponse = await response.text();
+        console.log('Non-JSON response:', textResponse);
+        throw new Error('Server returned non-JSON response');
+      }
+
+      console.log('Response data:', data);
+
+      if (response.ok) {
+        // Handle different successful response formats
+        const token = data.token || data.accessToken || data.authToken;
+        const adminData = data.admin || data.user || data.data || { username: formData.username };
+
+        if (token) {
+          // Successful authentication with token
+          localStorage.setItem('adminToken', token);
+          localStorage.setItem('adminUser', JSON.stringify(adminData));
+          
+          // Update connection status to online since login worked
+          setConnectionStatus('online');
+          
+          // Clear form
+          setFormData({ username: '', password: '' });
+          
+          console.log('Login successful, navigating to admin dashboard');
+          
+          // Navigate to admin dashboard
+          navigate('/admin/products');
+        } else if (data.success === true || data.status === 'success') {
+          // Handle success without explicit token
+          localStorage.setItem('adminToken', 'authenticated');
+          localStorage.setItem('adminUser', JSON.stringify(adminData));
+          setConnectionStatus('online');
+          setFormData({ username: '', password: '' });
+          navigate('/admin/products');
+        } else {
+          // Success response but missing token
+          console.error('Login response missing token:', data);
+          setError('Authentication successful but missing access token. Please contact administrator.');
+        }
       } else {
         // Authentication failed but server is responding
         setConnectionStatus('online');
-        setError(data.message || 'Invalid username or password. Please try again.');
+        
+        // Handle different error response formats
+        const errorMessage = data.message || data.error || data.msg || 'Invalid username or password';
+        setError(errorMessage);
+        console.log('Login failed:', errorMessage);
       }
     } catch (err: any) {
       console.error('Login error:', err);
@@ -117,11 +157,14 @@ export const AdminLogin = () => {
       if (err.name === 'AbortError') {
         setError('Request timeout. Please check your connection and try again.');
         setConnectionStatus('offline');
-      } else if (err.message?.includes('fetch') || err.message?.includes('NetworkError')) {
-        setError('Unable to connect to the server. Please ensure the backend is running.');
+      } else if (err.message?.includes('fetch') || err.message?.includes('NetworkError') || err.message?.includes('Failed to fetch')) {
+        setError('Unable to connect to the server. Please ensure the backend is running on localhost:5000.');
         setConnectionStatus('offline');
+      } else if (err.message?.includes('JSON')) {
+        setError('Server response format error. Please check backend configuration.');
+        setConnectionStatus('online'); // Server is responding but with wrong format
       } else {
-        setError('An unexpected error occurred. Please try again.');
+        setError(`Unexpected error: ${err.message || 'Please try again.'}`);
         // Don't change connection status for unexpected errors
       }
     } finally {
