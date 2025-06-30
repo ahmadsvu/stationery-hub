@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { motion } from 'framer-motion';
 import { MapPin, Phone, User, CreditCard } from 'lucide-react';
+import { area } from 'framer-motion/client';
 
-const deliveryAreas = [
+const areas = [
   { id: 'Tartous', name: 'Tartous', cost: 5 },
   { id: 'Latakia', name: 'Latakia', cost: 7 },
   { id: 'Homs', name: 'Homs', cost: 10 },
@@ -15,7 +16,7 @@ const deliveryAreas = [
 export const Checkout = () => {
   const navigate = useNavigate();
   const { cart, clearCart } = useStore();
-  const [selectedArea, setSelectedArea] = useState(deliveryAreas[0]);
+  const [selectedArea, setSelectedArea] = useState(areas[0]);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -23,7 +24,7 @@ export const Checkout = () => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = cart.reduce((sum, product) => sum + product.price * product.quantity, 0);
   const total = subtotal + selectedArea.cost;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -34,7 +35,7 @@ export const Checkout = () => {
   };
 
   const handleAreaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const area = deliveryAreas.find(a => a.id === e.target.value);
+    const area = areas.find(a => a.id === e.target.value);
     if (area) setSelectedArea(area);
   };
 
@@ -48,13 +49,14 @@ export const Checkout = () => {
         name: formData.name,
         phone: formData.phone,
         address: formData.address,
-        deliveryArea: selectedArea.name,
-        items: cart.map(item => ({
-          productId: item._id,
-          productName: item.name,
-          quantity: item.quantity,
-          price: item.price,
+        area: selectedArea.name,
+        products: cart.map(product => ({
+          _id: product._id,
+          name: product.name,
+          quantity: product.quantity,
+          price: product.price,
         })),
+        subtotal:subtotal,
         total: total,
         status: 'pending',
       };
@@ -171,7 +173,7 @@ export const Checkout = () => {
                       onChange={handleAreaChange}
                       className="w-full border border-gray-300 rounded-md shadow-sm py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                     >
-                      {deliveryAreas.map((area) => (
+                      {areas.map((area) => (
                         <option key={area.id} value={area.id}>
                           {area.name} (+${area.cost.toFixed(2)} delivery)
                         </option>
@@ -223,11 +225,11 @@ export const Checkout = () => {
             <h3 className="text-lg font-medium text-gray-900 mb-6">Order Summary</h3>
             
             <div className="space-y-4 mb-6">
-              {cart.map((item) => (
-                <div key={item._id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+              {cart.map((product) => (
+                <div key={product._id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
                   <img
-                    src={item.image.startsWith('http') ? item.image : `http://localhost:5000/uploads/${item.image}`}
-                    alt={item.name}
+                    src={product.image.startsWith('http') ? product.image : `http://localhost:5000/uploads/${product.image}`}
+                    alt={product.name}
                     className="w-12 h-12 object-cover rounded-md"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
@@ -235,10 +237,10 @@ export const Checkout = () => {
                     }}
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 truncate">{item.name}</p>
-                    <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
+                    <p className="font-medium text-gray-900 truncate">{product.name}</p>
+                    <p className="text-sm text-gray-500">Qty: {product.quantity}</p>
                   </div>
-                  <p className="font-medium text-gray-900">${(item.price * item.quantity).toFixed(2)}</p>
+                  <p className="font-medium text-gray-900">${(product.price * product.quantity).toFixed(2)}</p>
                 </div>
               ))}
             </div>

@@ -30,7 +30,7 @@ export const AdminLogin = () => {
       const endpoints = [
         'http://localhost:5000/product/get',
         'http://localhost:5000/blog/getblogs',
-        'http://localhost:5000/api/health', // If you have a health check endpoint
+         // If you have a health check endpoint
       ];
 
       let isConnected = false;

@@ -23,10 +23,11 @@ export interface BlogPost {
 
 export interface Order {
   id: string;
-  items: CartItem[];
+  products: CartItem[];
+  subtotal:number;
   total: number;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered';
-  deliveryArea: string;
+  status: 'pending' | 'canceled' | 'delivered';
+  area: string;
   address: string;
   phone: string;
   name: string;
