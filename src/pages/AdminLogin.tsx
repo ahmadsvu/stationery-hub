@@ -111,37 +111,28 @@ export const AdminLogin = () => {
       console.log('Response data:', data);
 
       if (response.ok) {
-        // Handle different successful response formats
-        const token = data.token || data.accessToken || data.authToken;
-        const adminData = data.admin || data.user || data.data || { username: formData.username };
+        // Handle successful authentication without requiring a token
+        const adminData = data.admin || data.user || data.data || { 
+          username: formData.username,
+          id: data.id || 'admin',
+          role: 'admin'
+        };
 
-        if (token) {
-          // Successful authentication with token
-          localStorage.setItem('adminToken', token);
-          localStorage.setItem('adminUser', JSON.stringify(adminData));
-          
-          // Update connection status to online since login worked
-          setConnectionStatus('online');
-          
-          // Clear form
-          setFormData({ username: '', password: '' });
-          
-          console.log('Login successful, navigating to admin dashboard');
-          
-          // Navigate to admin dashboard
-          navigate('/admin/products');
-        } else if (data.success === true || data.status === 'success') {
-          // Handle success without explicit token
-          localStorage.setItem('adminToken', 'authenticated');
-          localStorage.setItem('adminUser', JSON.stringify(adminData));
-          setConnectionStatus('online');
-          setFormData({ username: '', password: '' });
-          navigate('/admin/products');
-        } else {
-          // Success response but missing token
-          console.error('Login response missing token:', data);
-          setError('Authentication successful but missing access token. Please contact administrator.');
-        }
+        // Store admin session data (no token required)
+        localStorage.setItem('adminAuthenticated', 'true');
+        localStorage.setItem('adminUser', JSON.stringify(adminData));
+        localStorage.setItem('adminLoginTime', new Date().toISOString());
+        
+        // Update connection status to online since login worked
+        setConnectionStatus('online');
+        
+        // Clear form
+        setFormData({ username: '', password: '' });
+        
+        console.log('Login successful, navigating to admin dashboard');
+        
+        // Navigate to admin dashboard
+        navigate('/admin/products');
       } else {
         // Authentication failed but server is responding
         setConnectionStatus('online');
