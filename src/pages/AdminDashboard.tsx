@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Package, FileText, ShoppingBag, Plus, Pencil, Trash2, Search, LogOut, Eye, X, Save, Upload } from 'lucide-react';
+import { Package, FileText, ShoppingBag, Plus, Pencil, Trash2, Search, LogOut, Eye, X, Save, Settings, Lock, User, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog } from '@headlessui/react';
 
@@ -15,19 +15,11 @@ interface Product {
 }
 
 interface BlogPost {
-  _id: string;
+  id: string;
   title: string;
   content: string;
   date: string;
   author: string;
-  image?: string;
-}
-
-interface OrderItem {
-  productId: string;
-  productName: string;
-  quantity: number;
-  price: number;
 }
 
 interface Order {
@@ -35,36 +27,30 @@ interface Order {
   name: string;
   phone: string;
   address: string;
-  deliveryArea?: string;
-  products: OrderItem[]; // Updated to match your backend response
+  deliveryArea: string;
+  products: Array<{
+    productId: string;
+    productName: string;
+    quantity: number;
+    price: number;
+  }>;
   total: number;
   status: 'pending' | 'processing' | 'completed' | 'cancelled';
   createdAt: string;
-  __v?: number;
 }
 
 const Products = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [newProduct, setNewProduct] = useState({
-    name: '',
-    description: '',
-    price: 0,
-    category: 'Notebooks',
-    stock: 0,
-    image: null as File | null,
-  });
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchProducts = async () => {
     try {
       const response = await fetch('http://localhost:5000/product/get');
       const data = await response.json();
-      const productsArray = data.products || data.data || data || [];
-      setProducts(Array.isArray(productsArray) ? productsArray : []);
+      setProducts(data.products || []);
     } catch (error) {
       console.error('Error fetching products:', error);
     }
@@ -73,62 +59,6 @@ const Products = () => {
   useEffect(() => {
     fetchProducts();
   }, []);
-
-  const handleAddProduct = () => {
-    setNewProduct({
-      name: '',
-      description: '',
-      price: 0,
-      category: 'Notebooks',
-      stock: 0,
-      image: null,
-    });
-    setIsAddModalOpen(true);
-  };
-
-  const handleSaveNewProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      const formData = new FormData();
-      formData.append('name', newProduct.name);
-      formData.append('description', newProduct.description);
-      formData.append('price', newProduct.price.toString());
-      formData.append('category', newProduct.category);
-      formData.append('stock', newProduct.stock.toString());
-      
-      if (newProduct.image) {
-        formData.append('image', newProduct.image);
-      }
-
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('http://localhost:5000/product/add', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      if (response.ok) {
-        await fetchProducts();
-        setIsAddModalOpen(false);
-        setNewProduct({
-          name: '',
-          description: '',
-          price: 0,
-          category: 'Notebooks',
-          stock: 0,
-          image: null,
-        });
-      }
-    } catch (error) {
-      console.error('Error adding product:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleEditProduct = (product: Product) => {
     setEditingProduct(product);
@@ -197,10 +127,7 @@ const Products = () => {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">Manage Products</h2>
-        <button 
-          onClick={handleAddProduct}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors"
-        >
+        <button className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors">
           <Plus className="h-4 w-4" />
           Add Product
         </button>
@@ -278,151 +205,6 @@ const Products = () => {
           </tbody>
         </table>
       </div>
-
-      {/* Add Product Modal */}
-      <Dialog
-        open={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        className="relative z-50"
-      >
-        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-md w-full rounded-lg bg-white p-6 shadow-xl">
-            <div className="flex justify-between items-center mb-4">
-              <Dialog.Title className="text-lg font-medium text-gray-900">
-                Add New Product
-              </Dialog.Title>
-              <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveNewProduct} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                <input
-                  type="text"
-                  value={newProduct.name}
-                  onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea
-                  value={newProduct.description}
-                  onChange={(e) => setNewProduct({...newProduct, description: e.target.value})}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  rows={3}
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={newProduct.price}
-                    onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value)})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Stock</label>
-                  <input
-                    type="number"
-                    value={newProduct.stock}
-                    onChange={(e) => setNewProduct({...newProduct, stock: parseInt(e.target.value)})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                <select
-                  value={newProduct.category}
-                  onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  required
-                >
-                  <option value="Notebooks">Notebooks</option>
-                  <option value="Pens">Pens</option>
-                  <option value="Paper">Paper</option>
-                  <option value="Art Supplies">Art Supplies</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Product Image</label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                  <div className="space-y-1 text-center">
-                    <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                    <div className="flex text-sm text-gray-600">
-                      <label className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
-                        <span>Upload a file</span>
-                        <input
-                          type="file"
-                          className="sr-only"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              setNewProduct({...newProduct, image: file});
-                            }
-                          }}
-                        />
-                      </label>
-                      <p className="pl-1">or drag and drop</p>
-                    </div>
-                    <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
-                    {newProduct.image && (
-                      <p className="text-sm text-green-600">Selected: {newProduct.image.name}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Adding...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4" />
-                      Add Product
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </Dialog.Panel>
-        </div>
-      </Dialog>
 
       {/* Edit Product Modal */}
       <Dialog
@@ -545,158 +327,21 @@ const Products = () => {
 };
 
 const BlogPosts = () => {
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
-  const [newPost, setNewPost] = useState({
-    title: '',
-    content: '',
-    author: '',
-    image: null as File | null,
-  });
-  const [isLoading, setIsLoading] = useState(false);
-
-  const fetchPosts = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/blog/getblogs');
-      const data = await response.json();
-      const postsArray = data.blogs || data.data || data || [];
-      setPosts(Array.isArray(postsArray) ? postsArray : []);
-    } catch (error) {
-      console.error('Error fetching blog posts:', error);
-      // Fallback to sample data
-      setPosts([
-        {
-          _id: '1',
-          title: 'The Art of Journaling',
-          content: 'Discover the therapeutic benefits of daily journaling...',
-          date: '2024-01-15',
-          author: 'John Doe',
-        },
-      ]);
-    }
-  };
-
-  useEffect(() => {
-    fetchPosts();
-  }, []);
-
-  const handleAddPost = () => {
-    setNewPost({
-      title: '',
-      content: '',
-      author: '',
-      image: null,
-    });
-    setIsAddModalOpen(true);
-  };
-
-  const handleSaveNewPost = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      const formData = new FormData();
-      formData.append('title', newPost.title);
-      formData.append('content', newPost.content);
-      formData.append('author', newPost.author);
-      
-      if (newPost.image) {
-        formData.append('image', newPost.image);
-      }
-
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('http://localhost:5000/blog/addblog', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      if (response.ok) {
-        await fetchPosts();
-        setIsAddModalOpen(false);
-        setNewPost({
-          title: '',
-          content: '',
-          author: '',
-          image: null,
-        });
-      }
-    } catch (error) {
-      console.error('Error adding blog post:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleEditPost = (post: BlogPost) => {
-    setEditingPost(post);
-    setIsEditModalOpen(true);
-  };
-
-  const handleSavePost = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingPost) return;
-
-    setIsLoading(true);
-    try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`http://localhost:5000/blog/updateblog/${editingPost._id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          title: editingPost.title,
-          content: editingPost.content,
-          author: editingPost.author,
-        }),
-      });
-
-      if (response.ok) {
-        await fetchPosts();
-        setIsEditModalOpen(false);
-        setEditingPost(null);
-      }
-    } catch (error) {
-      console.error('Error updating blog post:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleDeletePost = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this blog post?')) return;
-
-    try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`http://localhost:5000/blog/deleteblog/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        setPosts(posts.filter(post => post._id !== id));
-      }
-    } catch (error) {
-      console.error('Error deleting blog post:', error);
-    }
-  };
+  const [posts, setPosts] = useState<BlogPost[]>([
+    {
+      id: '1',
+      title: 'The Art of Journaling',
+      content: 'Discover the therapeutic benefits of daily journaling...',
+      date: '2024-01-15',
+      author: 'John Doe',
+    },
+  ]);
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">Manage Blog Posts</h2>
-        <button 
-          onClick={handleAddPost}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors"
-        >
+        <button className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-indigo-700 transition-colors">
           <Plus className="h-4 w-4" />
           New Post
         </button>
@@ -704,7 +349,7 @@ const BlogPosts = () => {
 
       <div className="space-y-4">
         {posts.map((post) => (
-          <div key={post._id} className="bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow">
+          <div key={post.id} className="bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow">
             <div className="flex justify-between items-start">
               <div>
                 <h3 className="text-lg font-semibold">{post.title}</h3>
@@ -713,16 +358,10 @@ const BlogPosts = () => {
                 </p>
               </div>
               <div className="flex gap-2">
-                <button 
-                  onClick={() => handleEditPost(post)}
-                  className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
-                >
+                <button className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors">
                   <Pencil className="h-4 w-4" />
                 </button>
-                <button 
-                  onClick={() => handleDeletePost(post._id)}
-                  className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
-                >
+                <button className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -731,210 +370,6 @@ const BlogPosts = () => {
           </div>
         ))}
       </div>
-
-      {/* Add Post Modal */}
-      <Dialog
-        open={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        className="relative z-50"
-      >
-        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-2xl w-full rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <Dialog.Title className="text-lg font-medium text-gray-900">
-                Add New Blog Post
-              </Dialog.Title>
-              <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveNewPost} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                <input
-                  type="text"
-                  value={newPost.title}
-                  onChange={(e) => setNewPost({...newPost, title: e.target.value})}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Author</label>
-                <input
-                  type="text"
-                  value={newPost.author}
-                  onChange={(e) => setNewPost({...newPost, author: e.target.value})}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
-                <textarea
-                  value={newPost.content}
-                  onChange={(e) => setNewPost({...newPost, content: e.target.value})}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  rows={8}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Featured Image</label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                  <div className="space-y-1 text-center">
-                    <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                    <div className="flex text-sm text-gray-600">
-                      <label className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
-                        <span>Upload a file</span>
-                        <input
-                          type="file"
-                          className="sr-only"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              setNewPost({...newPost, image: file});
-                            }
-                          }}
-                        />
-                      </label>
-                      <p className="pl-1">or drag and drop</p>
-                    </div>
-                    <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
-                    {newPost.image && (
-                      <p className="text-sm text-green-600">Selected: {newPost.image.name}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Publishing...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4" />
-                      Publish Post
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </Dialog.Panel>
-        </div>
-      </Dialog>
-
-      {/* Edit Post Modal */}
-      <Dialog
-        open={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        className="relative z-50"
-      >
-        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-2xl w-full rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <Dialog.Title className="text-lg font-medium text-gray-900">
-                Edit Blog Post
-              </Dialog.Title>
-              <button
-                onClick={() => setIsEditModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {editingPost && (
-              <form onSubmit={handleSavePost} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                  <input
-                    type="text"
-                    value={editingPost.title}
-                    onChange={(e) => setEditingPost({...editingPost, title: e.target.value})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Author</label>
-                  <input
-                    type="text"
-                    value={editingPost.author}
-                    onChange={(e) => setEditingPost({...editingPost, author: e.target.value})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
-                  <textarea
-                    value={editingPost.content}
-                    onChange={(e) => setEditingPost({...editingPost, content: e.target.value})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    rows={8}
-                    required
-                  />
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setIsEditModalOpen(false)}
-                    className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {isLoading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4" />
-                        Save Changes
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
-            )}
-          </Dialog.Panel>
-        </div>
-      </Dialog>
     </div>
   );
 };
@@ -960,7 +395,7 @@ const Orders = () => {
       // Mock data for development
       setOrders([
         {
-          _id: '6861c08c7c8e2c92a0018ab0',
+          _id: '1',
           name: 'Alice Johnson',
           phone: '+1234567890',
           address: '123 Main St, City',
@@ -968,7 +403,7 @@ const Orders = () => {
           products: [
             { productId: '1', productName: 'Premium Notebook', quantity: 2, price: 24.99 }
           ],
-          total: 54.98,
+          total: 5498, // Price in cents
           status: 'pending',
           createdAt: '2024-01-20T10:00:00Z',
         },
@@ -982,27 +417,32 @@ const Orders = () => {
 
   const handleViewOrder = async (order: Order) => {
     setIsLoadingOrder(true);
-    setIsOrderModalOpen(true);
-    
     try {
-      // Fetch detailed order information using your new endpoint
-      const response = await fetch(`http://localhost:5000/api/getorder/${order._id}`);
+      const token = localStorage.getItem('adminToken');
+      const response = await fetch(`http://localhost:5000/api/getorder/${order._id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       
       if (response.ok) {
-        const orderData = await response.json();
-        // Your backend returns the order directly, not wrapped in an object
-        setSelectedOrder(orderData);
+        const detailedOrder = await response.json();
+        // Convert price from cents to dollars if needed
+        if (detailedOrder.total > 1000) {
+          detailedOrder.total = detailedOrder.total / 100;
+        }
+        setSelectedOrder(detailedOrder);
       } else {
-        // Fallback to the order data we already have
-        console.warn('Failed to fetch detailed order, using existing data');
+        // Fallback to existing order data
         setSelectedOrder(order);
       }
     } catch (error) {
       console.error('Error fetching order details:', error);
-      // Fallback to the order data we already have
+      // Fallback to existing order data
       setSelectedOrder(order);
     } finally {
       setIsLoadingOrder(false);
+      setIsOrderModalOpen(true);
     }
   };
 
@@ -1022,11 +462,6 @@ const Orders = () => {
         setOrders(orders.map(order => 
           order._id === orderId ? { ...order, status } : order
         ));
-        
-        // Update selected order if it's the one being modified
-        if (selectedOrder && selectedOrder._id === orderId) {
-          setSelectedOrder({ ...selectedOrder, status });
-        }
       }
     } catch (error) {
       console.error('Error updating order status:', error);
@@ -1078,13 +513,20 @@ const Orders = () => {
                     <option value="cancelled">Cancelled</option>
                   </select>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${(order.total / 100).toFixed(2)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  ${(order.total > 1000 ? order.total / 100 : order.total).toFixed(2)}
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <button 
                     onClick={() => handleViewOrder(order)}
-                    className="text-indigo-600 hover:text-indigo-900 flex items-center gap-1 p-1 rounded hover:bg-indigo-50 transition-colors"
+                    disabled={isLoadingOrder}
+                    className="text-indigo-600 hover:text-indigo-900 flex items-center gap-1 p-1 rounded hover:bg-indigo-50 transition-colors disabled:opacity-50"
                   >
-                    <Eye className="h-4 w-4" />
+                    {isLoadingOrder ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                     View Details
                   </button>
                 </td>
@@ -1105,7 +547,7 @@ const Orders = () => {
           <Dialog.Panel className="mx-auto max-w-2xl w-full rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <Dialog.Title className="text-xl font-semibold text-gray-900">
-                {selectedOrder ? `Order Details #${selectedOrder._id.slice(-6)}` : 'Loading Order...'}
+                Order Details #{selectedOrder?._id.slice(-6)}
               </Dialog.Title>
               <button
                 onClick={() => setIsOrderModalOpen(false)}
@@ -1115,12 +557,7 @@ const Orders = () => {
               </button>
             </div>
 
-            {isLoadingOrder ? (
-              <div className="flex justify-center items-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                <span className="ml-3 text-gray-600">Loading order details...</span>
-              </div>
-            ) : selectedOrder ? (
+            {selectedOrder && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1128,9 +565,7 @@ const Orders = () => {
                     <div className="text-sm text-gray-600 space-y-1">
                       <p><strong>Name:</strong> {selectedOrder.name}</p>
                       <p><strong>Phone:</strong> {selectedOrder.phone}</p>
-                      {selectedOrder.deliveryArea && (
-                        <p><strong>Delivery Area:</strong> {selectedOrder.deliveryArea}</p>
-                      )}
+                      <p><strong>Delivery Area:</strong> {selectedOrder.deliveryArea}</p>
                     </div>
                   </div>
                   <div>
@@ -1142,7 +577,7 @@ const Orders = () => {
                           {selectedOrder.status}
                         </span>
                       </p>
-                      <p><strong>Total:</strong> ${(selectedOrder.total / 100).toFixed(2)}</p>
+                      <p><strong>Total:</strong> ${(selectedOrder.total > 1000 ? selectedOrder.total / 100 : selectedOrder.total).toFixed(2)}</p>
                     </div>
                   </div>
                 </div>
@@ -1154,48 +589,286 @@ const Orders = () => {
 
                 <div>
                   <h3 className="font-medium text-gray-900 mb-3">Order Items</h3>
-                  {selectedOrder.products && selectedOrder.products.length > 0 ? (
-                    <div className="space-y-2">
-                      {selectedOrder.products.map((item, index) => (
-                        <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                          <div>
-                            <p className="font-medium">{item.productName}</p>
-                            <p className="text-sm text-gray-500">Quantity: {item.quantity}</p>
-                          </div>
-                          <p className="font-medium">${((item.price * item.quantity) / 100).toFixed(2)}</p>
+                  <div className="space-y-2">
+                    {(selectedOrder.products || []).map((item, index) => (
+                      <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <p className="font-medium">{item.productName}</p>
+                          <p className="text-sm text-gray-500">Quantity: {item.quantity}</p>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <p className="text-sm text-yellow-800">No product details available for this order.</p>
-                    </div>
-                  )}
+                        <p className="font-medium">${(item.price * item.quantity).toFixed(2)}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-
-                <div className="border-t pt-4">
-                  <h3 className="font-medium text-gray-900 mb-2">Update Order Status</h3>
-                  <select
-                    value={selectedOrder.status}
-                    onChange={(e) => updateOrderStatus(selectedOrder._id, e.target.value as Order['status'])}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="processing">Processing</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-gray-500">Failed to load order details.</p>
               </div>
             )}
           </Dialog.Panel>
         </div>
       </Dialog>
     </div>
+  );
+};
+
+// Admin Settings Component
+const AdminSettings = () => {
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    currentPassword: '',
+    newUsername: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+    setError('');
+    setSuccess('');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    // Validate passwords match
+    if (formData.newPassword && formData.newPassword !== formData.confirmPassword) {
+      setError('New passwords do not match');
+      setIsLoading(false);
+      return;
+    }
+
+    // Validate at least one field is being updated
+    if (!formData.newUsername && !formData.newPassword) {
+      setError('Please provide a new username or password');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('adminToken');
+      const updateData: any = {
+        currentPassword: formData.currentPassword,
+      };
+
+      if (formData.newUsername) {
+        updateData.newUsername = formData.newUsername;
+      }
+
+      if (formData.newPassword) {
+        updateData.newPassword = formData.newPassword;
+      }
+
+      const response = await fetch('http://localhost:5000/admin/update', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSuccess('Admin credentials updated successfully!');
+        setFormData({
+          currentPassword: '',
+          newUsername: '',
+          newPassword: '',
+          confirmPassword: '',
+        });
+        
+        // Update stored admin user if username changed
+        if (formData.newUsername) {
+          const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
+          adminUser.username = formData.newUsername;
+          localStorage.setItem('adminUser', JSON.stringify(adminUser));
+        }
+      } else {
+        setError(data.message || 'Failed to update credentials');
+      }
+    } catch (err) {
+      setError('Connection error. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setIsSettingsModalOpen(true)}
+        className="flex items-center w-full px-4 py-2 text-sm text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+        title="Admin Settings"
+      >
+        <Settings className="h-4 w-4 mr-2" />
+        Settings
+      </motion.button>
+
+      {/* Settings Modal */}
+      <Dialog
+        open={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        className="relative z-50"
+      >
+        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <Dialog.Panel className="mx-auto max-w-md w-full rounded-lg bg-white p-6 shadow-xl">
+            <div className="flex justify-between items-center mb-6">
+              <Dialog.Title className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                Admin Settings
+              </Dialog.Title>
+              <button
+                onClick={() => setIsSettingsModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md"
+              >
+                <p className="text-sm text-red-600">{error}</p>
+              </motion.div>
+            )}
+
+            {success && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md flex items-center gap-2"
+              >
+                <Check className="h-4 w-4 text-green-600" />
+                <p className="text-sm text-green-600">{success}</p>
+              </motion.div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Current Password *
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <input
+                    type="password"
+                    name="currentPassword"
+                    value={formData.currentPassword}
+                    onChange={handleInputChange}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="Enter current password"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-medium text-gray-900 mb-3">Update Credentials</h3>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      New Username (optional)
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                      <input
+                        type="text"
+                        name="newUsername"
+                        value={formData.newUsername}
+                        onChange={handleInputChange}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        placeholder="Enter new username"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      New Password (optional)
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                      <input
+                        type="password"
+                        name="newPassword"
+                        value={formData.newPassword}
+                        onChange={handleInputChange}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        placeholder="Enter new password"
+                      />
+                    </div>
+                  </div>
+
+                  {formData.newPassword && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Confirm New Password
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                        <input
+                          type="password"
+                          name="confirmPassword"
+                          value={formData.confirmPassword}
+                          onChange={handleInputChange}
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          placeholder="Confirm new password"
+                          required
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsModalOpen(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <motion.button
+                  type="submit"
+                  disabled={isLoading}
+                  whileTap={{ scale: 0.98 }}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Update Settings
+                    </>
+                  )}
+                </motion.button>
+              </div>
+            </form>
+          </Dialog.Panel>
+        </div>
+      </Dialog>
+    </>
   );
 };
 
@@ -1268,7 +941,8 @@ export const AdminDashboard = () => {
             );
           })}
         </nav>
-        <div className="p-6 border-t">
+        <div className="p-6 border-t space-y-2">
+          <AdminSettings />
           <button
             onClick={handleLogout}
             className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
