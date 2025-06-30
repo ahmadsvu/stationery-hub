@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Lock, User, Eye, EyeOff, AlertCircle, Wifi, WifiOff } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, AlertCircle, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 
 export const AdminLogin = () => {
   const navigate = useNavigate();
@@ -25,13 +25,38 @@ export const AdminLogin = () => {
   const checkConnection = async () => {
     try {
       setConnectionStatus('checking');
-      const response = await fetch('http://localhost:5000/admin/login', {
-        method: 'HEAD',
-        signal: AbortSignal.timeout(5000)
-      });
-      setConnectionStatus(response.status === 405 || response.ok ? 'online' : 'offline');
-      return response.status === 405 || response.ok; // 405 Method Not Allowed is expected for HEAD request
+      
+      // Try multiple endpoints to check server connectivity
+      const endpoints = [
+        'http://localhost:5000/product/get',
+        'http://localhost:5000/blog/getblogs',
+        'http://localhost:5000/api/health', // If you have a health check endpoint
+      ];
+
+      let isConnected = false;
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            method: 'GET',
+            signal: AbortSignal.timeout(3000)
+          });
+          
+          // If any endpoint responds (even with an error), server is running
+          if (response.status < 500) {
+            isConnected = true;
+            break;
+          }
+        } catch (err) {
+          // Continue to next endpoint
+          continue;
+        }
+      }
+
+      setConnectionStatus(isConnected ? 'online' : 'offline');
+      return isConnected;
     } catch (error) {
+      console.error('Connection check failed:', error);
       setConnectionStatus('offline');
       return false;
     }
@@ -53,16 +78,7 @@ export const AdminLogin = () => {
     setError('');
 
     try {
-      // Check connection first
-      const isConnected = await checkConnection();
-      
-      if (!isConnected) {
-        setError('Unable to connect to the server. Please check your connection and try again.');
-        setIsLoading(false);
-        return;
-      }
-
-      // Attempt database authentication
+      // Attempt database authentication directly
       const response = await fetch('http://localhost:5000/admin/login', {
         method: 'POST',
         headers: {
@@ -72,6 +88,7 @@ export const AdminLogin = () => {
           username: formData.username.trim(),
           password: formData.password,
         }),
+        signal: AbortSignal.timeout(10000) // 10 second timeout
       });
 
       const data = await response.json();
@@ -81,13 +98,17 @@ export const AdminLogin = () => {
         localStorage.setItem('adminToken', data.token);
         localStorage.setItem('adminUser', JSON.stringify(data.admin || { username: formData.username }));
         
+        // Update connection status to online since login worked
+        setConnectionStatus('online');
+        
         // Clear form
         setFormData({ username: '', password: '' });
         
         // Navigate to admin dashboard
         navigate('/admin/products');
       } else {
-        // Authentication failed
+        // Authentication failed but server is responding
+        setConnectionStatus('online');
         setError(data.message || 'Invalid username or password. Please try again.');
       }
     } catch (err: any) {
@@ -95,10 +116,13 @@ export const AdminLogin = () => {
       
       if (err.name === 'AbortError') {
         setError('Request timeout. Please check your connection and try again.');
-      } else if (err.message?.includes('fetch')) {
-        setError('Unable to connect to the server. Please check your connection.');
+        setConnectionStatus('offline');
+      } else if (err.message?.includes('fetch') || err.message?.includes('NetworkError')) {
+        setError('Unable to connect to the server. Please ensure the backend is running.');
+        setConnectionStatus('offline');
       } else {
         setError('An unexpected error occurred. Please try again.');
+        // Don't change connection status for unexpected errors
       }
     } finally {
       setIsLoading(false);
@@ -111,7 +135,7 @@ export const AdminLogin = () => {
         <>
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
           <Wifi className="h-4 w-4 text-green-600" />
-          <span className="text-green-600">Connected to server</span>
+          <span className="text-green-600">Server connected</span>
         </>
       )}
       {connectionStatus === 'offline' && (
@@ -124,7 +148,7 @@ export const AdminLogin = () => {
       {connectionStatus === 'checking' && (
         <>
           <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-600"></div>
+          <RefreshCw className="animate-spin h-4 w-4 text-yellow-600" />
           <span className="text-yellow-600">Checking connection...</span>
         </>
       )}
@@ -163,7 +187,7 @@ export const AdminLogin = () => {
                 <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
                 <div>
                   <p className="text-sm font-medium text-red-800">Server Connection Failed</p>
-                  <p className="text-sm text-red-700">Please ensure the backend server is running and try again.</p>
+                  <p className="text-sm text-red-700">Please ensure the backend server is running on port 5000.</p>
                 </div>
               </div>
             </motion.div>
@@ -198,7 +222,6 @@ export const AdminLogin = () => {
                   onChange={handleInputChange}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                   placeholder="Enter your username"
-                  disabled={connectionStatus === 'offline'}
                 />
               </div>
             </div>
@@ -218,13 +241,11 @@ export const AdminLogin = () => {
                   onChange={handleInputChange}
                   className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                   placeholder="Enter your password"
-                  disabled={connectionStatus === 'offline'}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  disabled={connectionStatus === 'offline'}
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
@@ -233,7 +254,7 @@ export const AdminLogin = () => {
 
             <motion.button
               type="submit"
-              disabled={isLoading || connectionStatus === 'offline'}
+              disabled={isLoading}
               whileTap={{ scale: 0.98 }}
               className="w-full bg-indigo-600 text-white py-3 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
@@ -242,8 +263,6 @@ export const AdminLogin = () => {
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                   Signing in...
                 </>
-              ) : connectionStatus === 'offline' ? (
-                'Server Offline'
               ) : (
                 'Sign In'
               )}
@@ -253,9 +272,10 @@ export const AdminLogin = () => {
           <div className="mt-6 text-center">
             <button
               onClick={checkConnection}
-              className="text-sm text-indigo-600 hover:text-indigo-800 transition-colors"
-              disabled={isLoading}
+              className="text-sm text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1 mx-auto"
+              disabled={isLoading || connectionStatus === 'checking'}
             >
+              <RefreshCw className={`h-4 w-4 ${connectionStatus === 'checking' ? 'animate-spin' : ''}`} />
               Check Connection
             </button>
           </div>
