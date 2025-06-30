@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Package, FileText, ShoppingBag, Plus, Pencil, Trash2, Search, LogOut, Eye, X, Save, Upload, RefreshCw, Wifi, WifiOff, AlertCircle, Settings, Lock, User, Check } from 'lucide-react';
+import { Package, FileText, ShoppingBag, Plus, Pencil, Trash2, Search, LogOut, Eye, X, Save, Upload, RefreshCw, Wifi, WifiOff, AlertCircle, Settings, User, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog } from '@headlessui/react';
 
@@ -39,6 +39,248 @@ interface Order {
   status: 'pending' | 'Delivered' | 'cancelled';
   createdAt: string;
 }
+
+const AdminSettings = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
+  const [formData, setFormData] = useState({
+    currentPassword: '',
+    newUsername: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+    setMessage(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setMessage(null);
+
+    // Validation
+    if (!formData.currentPassword) {
+      setMessage({ type: 'error', text: 'Current password is required' });
+      setIsLoading(false);
+      return;
+    }
+
+    if (!formData.newUsername && !formData.newPassword) {
+      setMessage({ type: 'error', text: 'Please provide either a new username or new password' });
+      setIsLoading(false);
+      return;
+    }
+
+    if (formData.newPassword && formData.newPassword !== formData.confirmPassword) {
+      setMessage({ type: 'error', text: 'New passwords do not match' });
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('adminToken');
+      const updateData: any = {
+        currentPassword: formData.currentPassword,
+      };
+
+      if (formData.newUsername) updateData.newUsername = formData.newUsername;
+      if (formData.newPassword) updateData.newPassword = formData.newPassword;
+
+      const response = await fetch('http://localhost:5000/admin/update', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Settings updated successfully!' });
+        
+        // Update localStorage if username was changed
+        if (formData.newUsername) {
+          const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
+          adminUser.username = formData.newUsername;
+          localStorage.setItem('adminUser', JSON.stringify(adminUser));
+        }
+
+        // Reset form
+        setFormData({
+          currentPassword: '',
+          newUsername: '',
+          newPassword: '',
+          confirmPassword: '',
+        });
+
+        // Close modal after 2 seconds
+        setTimeout(() => {
+          onClose();
+          setMessage(null);
+        }, 2000);
+      } else {
+        setMessage({ type: 'error', text: data.message || 'Failed to update settings' });
+      }
+    } catch (error) {
+      console.error('Error updating admin settings:', error);
+      setMessage({ type: 'error', text: 'Connection error. Please try again.' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      className="relative z-50"
+    >
+      <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+      <div className="fixed inset-0 flex items-center justify-center p-4">
+        <Dialog.Panel className="mx-auto max-w-md w-full rounded-lg bg-white p-6 shadow-xl">
+          <div className="flex justify-between items-center mb-6">
+            <Dialog.Title className="text-lg font-medium text-gray-900 flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Admin Settings
+            </Dialog.Title>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {message && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`mb-4 p-3 rounded-md ${
+                message.type === 'success' 
+                  ? 'bg-green-50 border border-green-200 text-green-700' 
+                  : 'bg-red-50 border border-red-200 text-red-700'
+              }`}
+            >
+              <p className="text-sm">{message.text}</p>
+            </motion.div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Current Password *
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <input
+                  type="password"
+                  name="currentPassword"
+                  value={formData.currentPassword}
+                  onChange={handleInputChange}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Enter current password"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                New Username
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <input
+                  type="text"
+                  name="newUsername"
+                  value={formData.newUsername}
+                  onChange={handleInputChange}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Enter new username (optional)"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                New Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <input
+                  type="password"
+                  name="newPassword"
+                  value={formData.newPassword}
+                  onChange={handleInputChange}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Enter new password (optional)"
+                />
+              </div>
+            </div>
+
+            {formData.newPassword && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Confirm New Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <input
+                    type="password"
+                    name="confirmPassword"
+                    value={formData.confirmPassword}
+                    onChange={handleInputChange}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="Confirm new password"
+                    required={!!formData.newPassword}
+                  />
+                </div>
+              </motion.div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Update Settings
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </Dialog.Panel>
+      </div>
+    </Dialog>
+  );
+};
 
 const Products = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -128,9 +370,25 @@ const Products = () => {
       const token = localStorage.getItem('adminToken');
       const formData = new FormData();
       
-      Object.entries(newProduct).forEach(([key, value]) => {
-        formData.append(key, value.toString());
-      });
+      // Add all product fields to FormData
+      formData.append('name', newProduct.name);
+      formData.append('description', newProduct.description);
+      formData.append('price', newProduct.price.toString());
+      formData.append('category', newProduct.category);
+      formData.append('stock', newProduct.stock.toString());
+      
+      // Handle image - if it's a file, append it; if it's a URL, append as string
+      if (newProduct.image) {
+        if (newProduct.image.startsWith('data:')) {
+          // Convert base64 to blob for file upload
+          const response = await fetch(newProduct.image);
+          const blob = await response.blob();
+          formData.append('image', blob, 'uploaded-image.jpg');
+        } else {
+          // It's a URL, send as string
+          formData.append('imageUrl', newProduct.image);
+        }
+      }
 
       const response = await fetch('http://localhost:5000/product/add', {
         method: 'POST',
@@ -175,19 +433,56 @@ const Products = () => {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('adminToken');
+      
+      // Prepare the update data
+      const updateData: any = {
+        name: editingProduct.name,
+        description: editingProduct.description,
+        price: editingProduct.price,
+        category: editingProduct.category,
+        stock: editingProduct.stock,
+      };
+
+      // Only include image if it's been changed (starts with data: or is a new URL)
+      if (editingProduct.image && (editingProduct.image.startsWith('data:') || editingProduct.image.startsWith('http'))) {
+        if (editingProduct.image.startsWith('data:')) {
+          // Handle file upload
+          const formData = new FormData();
+          Object.entries(updateData).forEach(([key, value]) => {
+            formData.append(key, value.toString());
+          });
+          
+          const response = await fetch(editingProduct.image);
+          const blob = await response.blob();
+          formData.append('image', blob, 'updated-image.jpg');
+
+          const response2 = await fetch(`http://localhost:5000/product/update/${editingProduct._id}`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+            body: formData,
+          });
+
+          if (response2.ok) {
+            await fetchProducts();
+            setIsEditModalOpen(false);
+            setEditingProduct(null);
+          }
+          return;
+        } else {
+          // It's a URL
+          updateData.imageUrl = editingProduct.image;
+        }
+      }
+
       const response = await fetch(`http://localhost:5000/product/update/${editingProduct._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          name: editingProduct.name,
-          description: editingProduct.description,
-          price: editingProduct.price,
-          category: editingProduct.category,
-          stock: editingProduct.stock,
-        }),
+        body: JSON.stringify(updateData),
       });
 
       if (response.ok) {
@@ -469,7 +764,7 @@ const Products = () => {
                   <input
                     type="url"
                     placeholder="Enter image URL"
-                    value={newProduct.image}
+                    value={newProduct.image.startsWith('data:') ? '' : newProduct.image}
                     onChange={(e) => setNewProduct({...newProduct, image: e.target.value})}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   />
@@ -614,7 +909,7 @@ const Products = () => {
                     <input
                       type="url"
                       placeholder="Enter image URL"
-                      value={editingProduct.image}
+                      value={editingProduct.image.startsWith('data:') ? '' : editingProduct.image}
                       onChange={(e) => setEditingProduct({...editingProduct, image: e.target.value})}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     />
@@ -622,9 +917,15 @@ const Products = () => {
                   {editingProduct.image && (
                     <div className="mt-2">
                       <img
-                        src={editingProduct.image}
+                        src={editingProduct.image.startsWith('data:') ? editingProduct.image : 
+                             editingProduct.image.startsWith('http') ? editingProduct.image : 
+                             `http://localhost:5000/uploads/${editingProduct.image}`}
                         alt="Preview"
                         className="w-20 h-20 object-cover rounded-md"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&q=80&w=100';
+                        }}
                       />
                     </div>
                   )}
@@ -1050,7 +1351,7 @@ const BlogPosts = () => {
                   <input
                     type="url"
                     placeholder="Enter image URL"
-                    value={newPost.image}
+                    value={newPost.image?.startsWith('data:') ? '' : newPost.image}
                     onChange={(e) => setNewPost({...newPost, image: e.target.value})}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   />
@@ -1179,7 +1480,7 @@ const BlogPosts = () => {
                     <input
                       type="url"
                       placeholder="Enter image URL"
-                      value={editingPost.image || ''}
+                      value={editingPost.image?.startsWith('data:') ? '' : editingPost.image || ''}
                       onChange={(e) => setEditingPost({...editingPost, image: e.target.value})}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     />
@@ -1593,273 +1894,12 @@ const Orders = () => {
   );
 };
 
-// Admin Settings Component
-const AdminSettings = () => {
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    currentPassword: '',
-    newUsername: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-    setError('');
-    setSuccess('');
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-    setSuccess('');
-
-    // Validate passwords match
-    if (formData.newPassword && formData.newPassword !== formData.confirmPassword) {
-      setError('New passwords do not match');
-      setIsLoading(false);
-      return;
-    }
-
-    // Validate at least one field is being updated
-    if (!formData.newUsername && !formData.newPassword) {
-      setError('Please provide a new username or password');
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('adminToken');
-      const updateData: any = {
-        currentPassword: formData.currentPassword,
-      };
-
-      if (formData.newUsername) {
-        updateData.newUsername = formData.newUsername;
-      }
-
-      if (formData.newPassword) {
-        updateData.newPassword = formData.newPassword;
-      }
-
-      const response = await fetch('http://localhost:5000/admin/update', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(updateData),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSuccess('Admin credentials updated successfully!');
-        setFormData({
-          currentPassword: '',
-          newUsername: '',
-          newPassword: '',
-          confirmPassword: '',
-        });
-        
-        // Update stored admin user if username changed
-        if (formData.newUsername) {
-          const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
-          adminUser.username = formData.newUsername;
-          localStorage.setItem('adminUser', JSON.stringify(adminUser));
-        }
-      } else {
-        setError(data.message || 'Failed to update credentials');
-      }
-    } catch (err) {
-      setError('Connection error. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <>
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setIsSettingsModalOpen(true)}
-        className="flex items-center w-full px-4 py-2 text-sm text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
-        title="Admin Settings"
-      >
-        <Settings className="h-4 w-4 mr-2" />
-        Settings
-      </motion.button>
-
-      {/* Settings Modal */}
-      <Dialog
-        open={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
-        className="relative z-50"
-      >
-        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-md w-full rounded-lg bg-white p-6 shadow-xl">
-            <div className="flex justify-between items-center mb-6">
-              <Dialog.Title className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                <Settings className="h-5 w-5" />
-                Admin Settings
-              </Dialog.Title>
-              <button
-                onClick={() => setIsSettingsModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md"
-              >
-                <p className="text-sm text-red-600">{error}</p>
-              </motion.div>
-            )}
-
-            {success && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md flex items-center gap-2"
-              >
-                <Check className="h-4 w-4 text-green-600" />
-                <p className="text-sm text-green-600">{success}</p>
-              </motion.div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Current Password *
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <input
-                    type="password"
-                    name="currentPassword"
-                    value={formData.currentPassword}
-                    onChange={handleInputChange}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="Enter current password"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <h3 className="text-sm font-medium text-gray-900 mb-3">Update Credentials</h3>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      New Username (optional)
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                      <input
-                        type="text"
-                        name="newUsername"
-                        value={formData.newUsername}
-                        onChange={handleInputChange}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        placeholder="Enter new username"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      New Password (optional)
-                    </label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                      <input
-                        type="password"
-                        name="newPassword"
-                        value={formData.newPassword}
-                        onChange={handleInputChange}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        placeholder="Enter new password"
-                      />
-                    </div>
-                  </div>
-
-                  {formData.newPassword && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Confirm New Password
-                      </label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                        <input
-                          type="password"
-                          name="confirmPassword"
-                          value={formData.confirmPassword}
-                          onChange={handleInputChange}
-                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                          placeholder="Confirm new password"
-                          required
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsSettingsModalOpen(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <motion.button
-                  type="submit"
-                  disabled={isLoading}
-                  whileTap={{ scale: 0.98 }}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Updating...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4" />
-                      Update Settings
-                    </>
-                  )}
-                </motion.button>
-              </div>
-            </form>
-          </Dialog.Panel>
-        </div>
-      </Dialog>
-    </>
-  );
-};
-
 export const AdminDashboard = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     const checkAuth = () => {
@@ -1925,7 +1965,13 @@ export const AdminDashboard = () => {
           })}
         </nav>
         <div className="p-6 border-t space-y-2">
-          <AdminSettings />
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="flex items-center w-full px-4 py-2 text-sm text-gray-600 hover:text-indigo-600 hover:bg-gray-50 rounded-md transition-colors"
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Settings
+          </button>
           <button
             onClick={handleLogout}
             className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
@@ -1943,6 +1989,11 @@ export const AdminDashboard = () => {
           <Route path="" element={<Products />} />
         </Routes>
       </div>
+
+      <AdminSettings 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)} 
+      />
     </div>
   );
 };
